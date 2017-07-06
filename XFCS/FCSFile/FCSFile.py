@@ -163,10 +163,13 @@ class FCSFile(object):
 
         print('Data extracted to: {}'.format(fn))
 
-
     def param(self, param):
         """Return the value for the given parameter"""
         return self.text[param]
+
+    def numeric_param(self, param):
+        """Return the numeric value for the given parameter"""
+        return self.text.get(param, 0)
 
     def set_param(self, param, value):
         """Set the value of the given parameter"""
