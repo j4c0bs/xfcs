@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-# import os
+
+"""
+FCS3.0 http://murphylab.web.cmu.edu/FCSAPI/FCS3.html
+FCS3.1
+A data set is a (HEADER, TEXT, DATA) group. Multiple data sets in one file is deprecated.
+"""
+
 import sys
 from .DataSection import DataSection
 from .Metadata import Metadata
 # ------------------------------------------------------------------------------
-# FCS3.0 http://murphylab.web.cmu.edu/FCSAPI/FCS3.html
-# FCS3.1
-# A data set is a (HEADER, TEXT, DATA) group. Multiple data sets in one file is deprecated.
-# ------------------------------------------------------------------------------
 def filter_numeric(s):
     """If the given string is numeric, return a numeric value for it"""
+
     if s.isnumeric():
         return int(s)
     else:
@@ -19,8 +22,10 @@ def filter_numeric(s):
         except ValueError:
             return s
 
+
 def filter_ascii32(s):
     """If string is repetition of '20', return 0 else convert to int"""
+
     x = set(s[i*2:i*2+2] for i in range(len(s)//2))
     tset = set(['20'])
     if x == tset:
@@ -30,8 +35,11 @@ def filter_ascii32(s):
 
 
 def text_dict(tokens):
-    key_val = zip(tokens[::2], tokens[1::2])
-    return {key.strip():filter_numeric(val.strip()) for key, val in key_val}
+    """Makes a dict of fcs text section parameter keys, values"""
+
+    keys_vals = zip(tokens[::2], tokens[1::2])
+    return {key.strip():filter_numeric(val.strip()) for key, val in keys_vals}
+
 
 # ------------------------------------------------------------------------------
 class FCSFile(object):
@@ -41,6 +49,7 @@ class FCSFile(object):
         self.header = None
         self.text = None
         self.all_keys = None
+        self.__key_set = {}
         self.supp_text = None
         self.data_hex_bytes = None
         self.analysis = None
@@ -50,18 +59,22 @@ class FCSFile(object):
 
     def load(self, f):
         """Load an FCS file
-            Parameters:
-            -----------
+
+        Arg:
+            f: A file descriptor or filepath to fcs file
+        Returns:
             f: A file descriptor
+        Raises:
+            NotImplementedError: if fcs file format version is not supported
         """
 
-        if type(f) == str:
+        if isinstance(f, str):
             f = open(f, 'rb')
 
         self.name = f.name
         version_id = f.read(6).decode("utf-8")
 
-        if (version_id == "FCS3.0") or (version_id == "FCS3.1"):
+        if version_id in ('FCS3.0', 'FCS3.1'):
             self.version = version_id
             self.__load_30(f)
         else:
@@ -72,8 +85,7 @@ class FCSFile(object):
     def __load_30(self, f):
         """Load an FCS 3.0 file
 
-            Parameters:
-            -----------
+        Arg:
             f: A file descriptor
         """
 
@@ -90,18 +102,16 @@ class FCSFile(object):
         text_delimiter = f.read(1).decode("utf-8")
         tokens = f.read(self.header['text_end'] - self.header['text_start']).decode("utf-8").split(text_delimiter)
 
-        # self.text = self.text_dict(tokens)
         self.text = text_dict(tokens)
         # >> change to meta_keys
         self.all_keys = tokens[::2]
+
         if len(self.all_keys) > len(self.text):
             n = -1 * (len(self.all_keys) - len(self.text))
             self.all_keys = self.all_keys[:n]
 
+        self.__key_set = set(self.all_keys)
 
-    # def text_dict(self, tokens):
-    #     return dict(zip([k.strip() for k in tokens[::2]],
-    #                     [filter_numeric(k.strip()) for k in tokens[1::2]]))
 
     def load_data(self, f):
         if not self.text:
@@ -110,7 +120,6 @@ class FCSFile(object):
         self.metadata = Metadata(self.text)
         self.__read_data(fcs_obj)
         self.datasection = DataSection(self.data_hex_bytes, self.metadata)
-
         # >>> change to self.data -> self.datasection.get_data()
         self.df = self.datasection.df
         self.param_attr_log = self.datasection.param_attr_log
@@ -163,9 +172,15 @@ class FCSFile(object):
 
         print('Data extracted to: {}'.format(fn))
 
+
+    def has_param(self, key):
+        """Return True given parameter is in text section"""
+        return (key in self.__key_set)
+
     def param(self, param):
         """Return the value for the given parameter"""
-        return self.text[param]
+        # return self.text[param]
+        return self.text.get(param, 'N/A')
 
     def numeric_param(self, param):
         """Return the numeric value for the given parameter"""
@@ -185,22 +200,4 @@ if __name__ == "__main__":
 
     x = FCSFile()
     x.load(open(sys.argv[1], 'rb'))
-
     print(x.text)
-
-
-    # import time
-    # from functools import wraps
-    #
-    # def timethis(func):
-    #     '''
-    #     Decorator that reports the execution time.
-    #     '''
-    #     @wraps(func)
-    #     def wrapper(*args, **kwargs):
-    #         start = time.time()
-    #         result = func(*args, **kwargs)
-    #         end = time.time()
-    #         print(func.__name__, end-start)
-    #         return result
-    #     return wrapper
