@@ -13,9 +13,8 @@ import time
 from XFCS.FCSFile.FCSFile import FCSFile
 from XFCS.utils.locator import locate_fcs_files
 from XFCS.utils.check_filename import valid_filename
+from XFCS.version import VERSION
 
-# ------------------------------------------------------------------------------
-# WIDTH = os.get_terminal_size()[0]
 # ------------------------------------------------------------------------------
 def parse_arguments():
     """Parse command line arguments."""
@@ -49,30 +48,27 @@ def parse_arguments():
     parser.add_argument('--output', '-o', type=argparse.FileType('w'),
                         default=sys.stdout, help='Output CSV filepath.')
 
-    # parser.add_argument('--version', action='version', version=VERSION)
+    parser.add_argument('--version', action='version', version=VERSION)
+
     return parser.parse_args()
 
 
 # ------------------------------ KEYWORD PREFS ---------------------------------
 def read_kw_prefs(kw_filter_file):
-    prefs = []
+    prefs = None
     with open(kw_filter_file.name, 'r') as kw_file:
         prefs = tuple(line.strip() for line in kw_file if line.strip() != '')
     return prefs
 
 
-# def write_kw_prefs(paths, meta_keys):
 def write_kw_prefs(meta_keys):
-    # dirout = os.path.commonpath(paths)
-    # fn = 'FCS_USER_KW.txt'
-    # fp = os.path.join(dirout, fn)
     kw_prefs_filename = 'FCS_USER_KW.txt'
-
     with open(kw_prefs_filename, 'w') as kw_file:
         for keyword in meta_keys:
             kw_file.write('{}\n'.format(keyword))
 
     return kw_prefs_filename
+
 
 # ------------------------------- GET METADATA ---------------------------------
 def load_metadata(paths, to_csv=True):
@@ -121,22 +117,19 @@ def find_mean_spx(user_meta_keys):
 
 def add_mean(fcs_objs, user_meta_keys):
     user_spx_mean = find_mean_spx(user_meta_keys)
-
     if not user_spx_mean:
         return None
 
     missing_spx_keys = []
-
     for spx_param, mean_range in user_spx_mean:
         spx_key = spx_param.split('_', 1)[0]
         if not any(fcs.has_param(spx_key) for fcs in fcs_objs):
             missing_spx_keys.extend((spx_key, spx_param))
             continue
 
-        spx_data = [x.numeric_param(spx_key) for x in fcs_objs]
-
         volt_mean = []
         v_queue = deque(maxlen=mean_range)
+        spx_data = (x.numeric_param(spx_key) for x in fcs_objs)
 
         for volt in spx_data:
             v_queue.append(volt)
@@ -148,20 +141,13 @@ def add_mean(fcs_objs, user_meta_keys):
     return missing_spx_keys
 
 
-# return [voltkw[0] for voltkw in user_spx_mean]
-
-# ------------------------------------------------------------------------------
-def write_tidy_csv(fcs_objs, meta_keys, csv_file):
-    writer = csv.writer(csv_file, dialect='excel')
+def write_tidy_csv(writer, fcs_objs, meta_keys):
     writer.writerow(meta_keys)
-
     for fcs in fcs_objs:
         writer.writerow((fcs.param(key) for key in meta_keys))
 
 
-def write_wide_csv(fcs_objs, meta_keys, csv_file):
-    writer = csv.writer(csv_file, dialect='excel')
-
+def write_wide_csv(writer, fcs_objs, meta_keys):
     for key in meta_keys:
         key_row = [key]
         vals = (fcs.param(key) for fcs in fcs_objs)
@@ -169,48 +155,39 @@ def write_wide_csv(fcs_objs, meta_keys, csv_file):
         writer.writerow(key_row)
 
 
-# ------------------------------------------------------------------------------
-def write_metadata(fcs_objs, meta_keys, tidy):
+def write_metadata(fcs_objs, meta_keys, csv_fn, tidy):
+    write_csv_file = write_tidy_csv if tidy else write_wide_csv
+    with open(csv_fn, 'w') as csv_file:
+        writer = csv.writer(csv_file, dialect='excel')
+        write_csv_file(writer, fcs_objs, meta_keys)
 
-    if tidy:
-        write_csv = write_tidy_csv
-    else:
-        write_csv = write_wide_csv
 
+def merge_metadata(fcs_objs, meta_keys, tidy):
     curdir_name = os.path.basename(os.getcwd())
-    csv_out_path = '{}_FCS_metadata.csv'.format(curdir_name)
-
-    with open(csv_out_path, 'w') as csv_file:
-        write_csv(fcs_objs, meta_keys, csv_file)
-
-    return csv_out_path
+    csv_fn = '{}_FCS_metadata.csv'.format(curdir_name)
+    write_metadata(fcs_objs, meta_keys, csv_fn, tidy)
+    return csv_fn
 
 
 def fcs_to_csv_path(fcs_path, tidy=False):
-    # >>> check names or overwrite?
+    # >>> for testing, disable writing csv files in place
     desc = '-t' if tidy else ''
     filename = os.path.basename(fcs_path).split('.')[0]
-    par_dir = os.path.dirname(fcs_path)
-    name = '{}_metadata{}'.format(filename, desc)
-    # csv_name = valid_filename(name, 'csv')
-    csv_name = '{}_metadata{}.csv'.format(filename, desc)
-    # >>> for testing, disable writing csv files in place
-    # return os.path.join(par_dir, csv_name)
-    return csv_name
+    csv_fn = '{}_metadata{}.csv'.format(filename, desc)
+    # par_dir = os.path.dirname(fcs_path)
+    # name = '{}_metadata{}'.format(filename, desc)
+    # return os.path.join(par_dir, csv_fn)
+    return csv_fn
 
 
 def batch_separate_metadata(fcs_objs, meta_keys, tidy):
-    write_csv = write_tidy_csv if tidy else write_wide_csv
+    src_keys = ('SRC_FILE', 'CSV_CREATED')
     csv_paths = []
-
     for fcs in fcs_objs:
-        # sep_keys = [key for key in meta_keys if key in fcs.text]
-        sep_keys = tuple(key for key in meta_keys if fcs.has_param(key))
-        csv_out_path = fcs_to_csv_path(fcs.param('SRC_FILE'), tidy=tidy)
-        with open(csv_out_path, 'w') as csv_file:
-            write_csv((fcs,), sep_keys, csv_file)
-        csv_paths.append(csv_out_path)
-
+        sep_keys = tuple(key for key in meta_keys if (fcs.has_param(key) or key in src_keys))
+        csv_fn = fcs_to_csv_path(fcs.param('SRC_FILE'), tidy=tidy)
+        write_metadata((fcs,), sep_keys, csv_fn, tidy)
+        csv_paths.append(csv_fn)
     return csv_paths
 
 
@@ -242,8 +219,8 @@ def collect_filepaths(in_paths, recursive, limit=0):
 def main():
     """Main control for CLI metadata extraction.
 
-    fcs_objs: iterable of metadata dicts
-    meta_keys: all_keys in order + any new (calculated) keys at end
+        fcs_objs: iterable of metadata dicts
+        meta_keys: all_keys in order + any new (calculated) keys at end
     """
 
     args = parse_arguments()
@@ -264,7 +241,7 @@ def main():
             csv_paths = batch_separate_metadata(fcs_objs, meta_keys, args.tidy)
             print('>>> csv files written: {}'.format(len(csv_paths)))
         else:
-            csv_out_path = write_metadata(fcs_objs, meta_keys, args.tidy)
+            csv_out_path = merge_metadata(fcs_objs, meta_keys, args.tidy)
             print('>>> csv file written to: {}'.format(csv_out_path))
 
 
@@ -273,10 +250,7 @@ def main():
 #     print()
 #     # start = time.time()
 #     main()
-#
 #     # end = time.time()
-#     # print('-'*WIDTH)
 #     # print('Total time {:.5f} sec for {} files'.format(end-start, total_found))
 #     # print('Ave time per file: {:.5f} sec'.format((end-start)/total_found))
-#     # print('-'*WIDTH)
 #     # print()

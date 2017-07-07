@@ -179,7 +179,6 @@ class FCSFile(object):
 
     def param(self, param):
         """Return the value for the given parameter"""
-        # return self.text[param]
         return self.text.get(param, 'N/A')
 
     def numeric_param(self, param):
