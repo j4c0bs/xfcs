@@ -47,7 +47,7 @@ class FCSFile(object):
         """Initialize an FCSFile object"""
         self.version = None
         self.header = None
-        self.text = None
+        self.text = {}
         self.all_keys = None
         self.__key_set = {}
         self.supp_text = None
@@ -125,7 +125,6 @@ class FCSFile(object):
         self.param_attr_log = self.datasection.param_attr_log
 
 
-
     def __read_data(self, f):
         """Read Data Section"""
 
@@ -162,15 +161,26 @@ class FCSFile(object):
 
 
     def write_data(self, filetype='csv'):
-        fn = 'nothing extracted'
 
         if filetype == 'csv':
             fn = self.datasection.store_csv_data(self.name)
-
-        if filetype == 'hdf5':
+        elif filetype == 'hdf5':
             fn = self.datasection.store_hdf5_data(self.name)
+        else:
+            fn = 'nothing extracted'
 
         print('Data extracted to: {}'.format(fn))
+
+
+    def load_from_csv(self, keys_in, param_vals):
+        # >>> param_keys, values ? -> self.all_keys = param_keys[:] ?
+
+        for param, value in param_vals.items():
+            self.set_param(param, value)
+            # self.all_keys.append(param)
+
+        self.all_keys = keys_in[:]
+        self.__key_set = set(self.all_keys)
 
 
     def has_param(self, key):
@@ -187,6 +197,8 @@ class FCSFile(object):
 
     def set_param(self, param, value):
         """Set the value of the given parameter"""
+        if isinstance(value, str) and not value.isalpha():
+            value = filter_numeric(value)
         self.text[param] = value
 
     def write(self, f):

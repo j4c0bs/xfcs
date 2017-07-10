@@ -3,7 +3,6 @@
 import glob
 import os
 # ------------------------------------------------------------------------------
-
 def locate_fcs_files(recursive=False):
     glob_loc = '[!.]*.fcs'
     if recursive:
@@ -11,4 +10,5 @@ def locate_fcs_files(recursive=False):
         glob_loc = rec_loc_path
 
     found = glob.glob(glob_loc, recursive=recursive)
-    return sorted(found, key=lambda fp: os.path.basename(fp))
+    found.sort(key=lambda fp: os.path.basename(fp))
+    return found
