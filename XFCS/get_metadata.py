@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
 import argparse
-import csv
 from itertools import compress
 import os
 import time
 
 from XFCS.FCSFile.FCSFile import FCSFile
 from XFCS.utils.locator import locate_fcs_files
+from XFCS.utils import metadata_csv
 from XFCS.utils.metadata_stats import add_param_mean
 from XFCS.version import VERSION
 
@@ -77,7 +77,7 @@ def read_kw_prefs(kw_filter_file):
     """
 
     user_meta_keys = None
-    with open(kw_filter_file.name, 'r') as kw_file:
+    with open(kw_filter_file, 'r') as kw_file:
         user_meta_keys = [line.strip() for line in kw_file if line.strip() != '']
     return user_meta_keys
 
@@ -139,61 +139,6 @@ def apply_keyword_filter(fcs_objs, kw_filter_file):
 
 
 # ------------------------------------------------------------------------------
-def write_tidy_csv(writer, fcs_objs, meta_keys):
-    """Writes tidy / long csv format file.
-
-    Args:
-        writer: csv.writer instance
-        fcs_objs: iterable of loaded FCSFile instances.
-        meta_keys: iterable of fcs metadata Parameter keys to use.
-
-    Returns:
-        None
-    """
-
-    writer.writerow(meta_keys)
-    for fcs in fcs_objs:
-        writer.writerow((fcs.param(key) for key in meta_keys))
-
-
-def write_wide_csv(writer, fcs_objs, meta_keys):
-    """Writes wide csv format file.
-
-    Args:
-        writer: csv.writer instance
-        fcs_objs: iterable of loaded FCSFile instances.
-        meta_keys: iterable of fcs metadata Parameter keys to use.
-
-    Returns:
-        None
-    """
-
-    for key in meta_keys:
-        key_row = [key]
-        vals = (fcs.param(key) for fcs in fcs_objs)
-        key_row.extend(vals)
-        writer.writerow(key_row)
-
-
-def write_metadata(fcs_objs, meta_keys, csv_fn, tidy):
-    """Handles csv.writer init and passing args to selected csv write func.
-
-    Args:
-        fcs_objs: iterable of loaded FCSFile instances.
-        meta_keys: iterable of fcs metadata Parameter keys to use.
-        csv_fn: filepath/name for csv file.
-        tidy: bool - enables tidy data format.
-
-    Returns:
-        None
-    """
-
-    write_csv_file = write_tidy_csv if tidy else write_wide_csv
-    with open(csv_fn, 'w') as csv_file:
-        writer = csv.writer(csv_file, dialect='excel')
-        write_csv_file(writer, fcs_objs, meta_keys)
-
-
 def merge_metadata(fcs_objs, meta_keys, tidy, fn_out=''):
     """All fcs metadata written to one csv file.
 
@@ -214,12 +159,13 @@ def merge_metadata(fcs_objs, meta_keys, tidy, fn_out=''):
         curdir_name = os.path.basename(os.getcwd())
         csv_fn = '{}_FCS_metadata{}.csv'.format(curdir_name, desc)
 
-    write_metadata(fcs_objs, meta_keys, csv_fn, tidy)
+    metadata_csv.write_file(fcs_objs, meta_keys, csv_fn, tidy)
     return csv_fn
 
 
 def fcs_to_csv_path(fcs_name, fcs_dir='', tidy=False):
     """Convert fcs filename to csv_metadata filename."""
+
     # >>> for testing, disable writing csv files in place
     desc = '-t' if tidy else '-w'
     filename = fcs_name.split('.')[0]
@@ -248,7 +194,7 @@ def batch_separate_metadata(fcs_objs, meta_keys, tidy):
         sep_keys = tuple(key for key in meta_keys if fcs.has_param(key) or key in src_keys)
         # csv_fn = fcs_to_csv_path(fcs.param('SRC_FILE'), fcs.param('SRC_DIR'), tidy=tidy)
         csv_fn = fcs_to_csv_path(fcs.param('SRC_FILE'), tidy=tidy)
-        write_metadata((fcs,), sep_keys, csv_fn, tidy)
+        metadata_csv.write_file((fcs,), sep_keys, csv_fn, tidy)
         csv_paths.append(csv_fn)
     return csv_paths
 
@@ -271,36 +217,6 @@ def collect_filepaths(in_paths, recursive, limit=0):
 
 
 # ------------------------------------------------------------------------------
-def read_metadata_csv_file(master_csv, meta_keys):
-    """Read in metadata from csv file and determine if format is tidy or wide."""
-
-    merge_keys = []
-    merge_data = []
-    is_tidy = False
-
-    with open(master_csv, 'r') as metadata_csv:
-        meta_reader = csv.reader(metadata_csv)
-        rows = [row for row in meta_reader]
-
-    # determine if tidy format
-    if len(set(rows[0]) & set(meta_keys)) > 1:
-        is_tidy = True
-        merge_keys = rows[0]
-        for row in rows[1:]:
-            merge_data.append({key: value for key, value in zip(merge_keys, row)})
-
-    else:
-        # merge_keys = tuple(row[0] for row in rows)
-        merge_keys = [row[0] for row in rows]
-        if len(set(merge_keys) & set(meta_keys)) > 1:
-            entries = len(rows[0])
-            for ix in range(1, entries):
-                col = (row[ix] for row in rows)
-                merge_data.append({key: value for key, value in zip(merge_keys, col)})
-
-    return merge_keys, merge_data, is_tidy
-
-
 def batch_load_fcs_from_csv(merge_keys, merge_data):
     """Init FCSFile instances using extracted metadata from csv file."""
 
@@ -315,7 +231,7 @@ def batch_load_fcs_from_csv(merge_keys, merge_data):
 def append_metadata(fcs_objs, meta_keys, master_csv, fn_out):
     """Append new fcs file(s) metadata to existing fcs metadata csv file."""
 
-    merge_keys, merge_data, is_tidy = read_metadata_csv_file(master_csv, meta_keys)
+    merge_keys, merge_data, is_tidy = metadata_csv.read_file(master_csv, meta_keys)
 
     if not all((merge_keys, merge_data)):
         print('>>> No metadata keys match / data located')
@@ -376,7 +292,7 @@ def main():
 
     else:
         if args.kw_filter:
-            meta_keys = apply_keyword_filter(fcs_objs, args.kw_filter)
+            meta_keys = apply_keyword_filter(fcs_objs, args.kw_filter.name)
 
         if args.sepfiles:
             csv_paths = batch_separate_metadata(fcs_objs, meta_keys, args.tidy)
@@ -385,10 +301,6 @@ def main():
             fn_out = '' if not args.output else args.output.name
             csv_out_path = merge_metadata(fcs_objs, meta_keys, args.tidy, fn_out)
             print('>>> csv file written to: {}'.format(csv_out_path))
-
-
-
-
 
 
 # ------------------------------------------------------------------------------

@@ -151,16 +151,6 @@ class FCSFile(object):
 
         self.__key_set = set(self.param_keys)
 
-        # self.text = text_dict(tokens)
-        # self.text = {key.strip():filter_numeric(val.strip())
-        #              for key, val in zip(tokens[::2], tokens[1::2])}
-        # self.all_keys = [key.strip() for key in tokens[::2]]
-        # if len(self.all_keys) > len(self.text):
-        #     n = -1 * (len(self.all_keys) - len(self.text))
-        #     self.all_keys = self.all_keys[:n]
-        #
-        # self.__key_set = set(self.all_keys)
-
 
     def load_data(self, f):
         """Load Data Section for reading"""
