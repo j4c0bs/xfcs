@@ -6,7 +6,6 @@ FCS3.1
 A data set is a (HEADER, TEXT, DATA) group. Multiple data sets in one file is deprecated.
 """
 
-from os.path import basename
 import sys
 from .DataSection import DataSection
 from .Metadata import Metadata
@@ -35,31 +34,66 @@ def filter_ascii32(hex_str):
         return int(hex_str,16)
 
 
-# def text_dict(tokens):
-#     """Makes a dict of fcs text section parameter keys, values"""
-#     return dict(zip([k.strip() for k in tokens[::2]],
-#                [filter_numeric(k.strip()) for k in tokens[1::2]]))
-
-
 # ------------------------------------------------------------------------------
 class FCSFile(object):
+    """Instantiates an FCSFile object.
+
+    Public Attributes:
+        version
+        text: dict containing all Parameter metadata key : value
+        param_keys: iterable of Parameter keys in order of location in fcs text section
+
+        data_hex_bytes: Complete Data Section read as hex
+        metadata
+        data ->
+        datasection
+
+    Public Methods:
+        load: Load an FCS file for reading and confirm version id is supported.
+        load_from_csv: Init FCSFile object from csv containing Parameter key, value pairs.
+        load_data: Load Data Section for reading
+        write_data: Writes data section to csv or hdf5 file.
+
+        check_file_standards_conformity: Confirms metadata format.
+        meta_hash: Generates unique fingerprint based on Parameter key, value pairs.
+
+        has_param: Confirm Parameter key in text section.
+        param: Retrieve value for given Parameter key.
+        numeric_param: Force retrieve numeric value for given Parameter key or 0.
+        set_param: Sets value for given Parameter key within self.text.
+
+    """
+
     def __init__(self):
-        """Initialize an FCSFile object"""
+        """Initialize an FCSFile object.
+
+        Attributes:
+            version: version ID for FCS file.
+            text: dict of text section metadata Parameter key, value pairs
+            param_keys: iterable of Parameter keys in order of location in fcs text section
+
+            data_hex_bytes: Complete Data Section read as hex
+            metadata
+            data
+            datasection
+
+        """
+
         self.version = None
-        self.header = None
+        self.__header = None
         self.text = {}
         self.param_keys = None
         self.__key_set = {}
-        self.supp_text = None
-        self.data_hex_bytes = None
-        self.analysis = None
         self.metadata = None
+        self.data_hex_bytes = None
         self.data = None
         self.datasection = None
+        self.__supp_text = None
+        self.__analysis = None
 
 
     def load(self, fcs_obj):
-        """Load an FCS file
+        """Load an FCS file and confirm version id is supported.
 
         Arg:
             f: A file descriptor or filepath to fcs file
@@ -85,14 +119,14 @@ class FCSFile(object):
 
 
     def __load_30(self, f):
-        """Load an FCS 3.0 file
+        """Load an FCS 3.0 file and read text section (metadata).
 
         Arg:
             f: A file descriptor
         """
 
         f.seek(10)
-        self.header = {"text_start": int(f.read(8).decode("utf-8")),
+        self.__header = {"text_start": int(f.read(8).decode("utf-8")),
                        "text_end": int(f.read(8).decode("utf-8")),
                        "data_start": int(f.read(8).decode("utf-8")),
                        "data_end": int(f.read(8).decode("utf-8")),
@@ -100,9 +134,9 @@ class FCSFile(object):
                        "analysis_end": filter_ascii32(f.read(8).hex())}
 
         # Read the TEXT section
-        f.seek(self.header['text_start'])
+        f.seek(self.__header['text_start'])
         text_delimiter = f.read(1).decode("utf-8")
-        tokens = f.read(self.header['text_end'] - self.header['text_start']).decode("utf-8").split(text_delimiter)
+        tokens = f.read(self.__header['text_end'] - self.__header['text_start']).decode("utf-8").split(text_delimiter)
 
         # Collect Parameter keys and values for text map
         all_keys = [key.strip() for key in tokens[::2] if key]
@@ -129,6 +163,8 @@ class FCSFile(object):
 
 
     def load_data(self, f):
+        """Load Data Section for reading"""
+
         if not self.text:
             fcs_obj = self.load(f)
 
@@ -156,12 +192,12 @@ class FCSFile(object):
 
 
     def __get_data_seek(self):
-        header_check_1 = (self.header['data_start'] == int(self.text['$BEGINDATA']))
-        header_check_2 = (self.header['data_end'] == int(self.text['$ENDDATA']))
+        header_check_1 = (self.__header['data_start'] == int(self.text['$BEGINDATA']))
+        header_check_2 = (self.__header['data_end'] == int(self.text['$ENDDATA']))
 
         if header_check_1 and header_check_2:
-            data_start = self.header['data_start']
-            data_end = self.header['data_end']
+            data_start = self.__header['data_start']
+            data_end = self.__header['data_end']
         else:
             data_start = int(self.text['$BEGINDATA'])
             data_end = int(self.text['$ENDDATA'])
@@ -170,12 +206,18 @@ class FCSFile(object):
 
 
     def check_file_standards_conformity(self):
+        """Confirms metadata test or exits"""
+
+        if not self.metadata:
+            self.metadata = Metadata(self.text)
+
         if not self.metadata.verify_format(len(self.data_hex_bytes)):
             print('ABORTING DATA EXTRACTION')
             sys.exit(0)
 
 
     def write_data(self, filetype='csv'):
+        """Writes data section to csv or hdf5 file"""
 
         if filetype == 'csv':
             fn = self.datasection.store_csv_data(self.name)
@@ -222,12 +264,9 @@ class FCSFile(object):
             meta_keys = self.param_keys
 
         for param in meta_keys:
-            if param == 'CSV_CREATED':
+            if param in ('SRC_DIR', 'CSV_CREATED'):
                 continue
-            elif param == 'SRC_FILE':
-                txt.extend((param, basename(self.text[param])))
-            else:
-                txt.extend((param, str(self.text[param])))
+            txt.extend((param, str(self.text[param])))
 
         mrg_txt = ''.join(txt)
         return hash(mrg_txt)
@@ -251,7 +290,7 @@ class FCSFile(object):
             value = filter_numeric(value)
         self.text[param] = value
 
-    def write(self, f):
+    def __write(self, f):
         """Write an FCS file (not implemented)"""
         raise NotImplementedError("Can't write FCS files yet")
 
