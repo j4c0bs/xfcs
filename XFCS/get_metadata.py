@@ -19,26 +19,25 @@ from XFCS.version import VERSION
 def parse_arguments():
     """Parse command line arguments."""
 
-    parser = argparse.ArgumentParser(prog='fcsmetadata', description='Parse FCS Metadata')
+    parser = argparse.ArgumentParser(prog='xfcs', description='Parse FCS Metadata')
 
     csv_in = parser.add_argument_group('Input Options')
     csv_in.add_argument('--input', '-i', metavar='<file.fcs>', nargs='+',
-    type=argparse.FileType('rb'), help='Select input file(s) instead of default directory search.')
+    type=argparse.FileType('rb'), help='Optional select input file(s) instead of default directory search.')
 
     csv_in.add_argument('--recursive', '-r', action='store_true', dest='recursive',
     help='Enable recursive search of current directory.')
 
-    csvout = parser.add_argument_group('Output Options')
-    csvout.add_argument('--limit', '-l', type=int, default=0, metavar='n',
-                        help='Number of most recent files to parse.')
+    csv_in.add_argument('--limit', '-l', type=int, default=0, metavar='n',
+    help='Number of most recent files to parse.')
 
-    csvout.add_argument('--tidy', '-t', action='store_true',
-                        help='Outputs CSV in tidy (long) format.')
+    csvout = parser.add_argument_group('Output Options - select 1')
+    outgrp = csvout.add_mutually_exclusive_group()
 
-    csvout.add_argument('--sep-files', '-s', action='store_true', dest='sepfiles',
+    outgrp.add_argument('--sep-files', '-s', action='store_true', dest='sepfiles',
                         help='Each input FCS file generates one csv file.')
 
-    csvout.add_argument('--output', '-o', type=argparse.FileType('w'), metavar='<file.csv>',
+    outgrp.add_argument('--output', '-o', type=argparse.FileType('w'), metavar='<file.csv>',
                         help='Output .csv filepath for merged metadata file.')
 
     procopt = parser.add_argument_group('Metadata Option - select 1')
@@ -53,6 +52,9 @@ def parse_arguments():
     kw_merge.add_argument('--get-kw', '-g', action='store_true', dest='get_kw',
                         help='Generate user keyword text file.')
 
+    parser.add_argument('--tidy', '-t', action='store_true',
+                        help='Outputs CSV in tidy (long) format.')
+
     parser.add_argument('-v', '--version', action='version', version=VERSION)
 
     return parser.parse_args()
@@ -62,7 +64,7 @@ def parse_arguments():
 def read_kw_prefs(kw_filter_file):
     user_meta_keys = None
     with open(kw_filter_file.name, 'r') as kw_file:
-        user_meta_keys = tuple(line.strip() for line in kw_file if line.strip() != '')
+        user_meta_keys = [line.strip() for line in kw_file if line.strip() != '']
     return user_meta_keys
 
 
@@ -94,7 +96,7 @@ def load_metadata(paths, to_csv=True):
             fcs.set_param('CSV_CREATED', time.strftime('%m/%d/%y %H:%M:%S'))
 
         # TODO: make key check more efficient
-        meta_keys.extend((mk for mk in fcs.all_keys if mk not in meta_keys))
+        meta_keys.extend((mk for mk in fcs.param_keys if mk not in meta_keys))
         fcs_objs.append(fcs)
 
     return fcs_objs, meta_keys
@@ -127,14 +129,17 @@ def find_mean_spx_param_keys(user_meta_keys):
 def add_param_mean(fcs_objs, user_meta_keys):
     param_key_ranges = find_mean_spx_param_keys(user_meta_keys)
     if not param_key_ranges:
-        return None
+        return user_meta_keys
 
     missing_spx_keys = []
+    volt_keys = []
 
     for param_key, param_mean_key, mean_range in param_key_ranges:
         if not any(fcs.has_param(param_key) for fcs in fcs_objs):
-            missing_spx_keys.append(param_key)
+            missing_spx_keys.extend((param_key, param_mean_key))
             continue
+
+        volt_keys.append((param_key, param_mean_key))
 
         volt_mean = []
         v_queue = deque(maxlen=mean_range)
@@ -146,6 +151,12 @@ def add_param_mean(fcs_objs, user_meta_keys):
 
         for x, volt in zip(fcs_objs, volt_mean):
             x.set_param(param_mean_key, round(volt, 2))
+
+    # force parameter keys included if only $Px_MEAN in user kw file
+    for (param_key, param_mean_key) in volt_keys:
+        if param_key not in user_meta_keys:
+            ix = user_meta_keys.find(param_mean_key)
+            user_meta_keys.insert(ix, param_key)
 
     if missing_spx_keys:
         drop_keys = (k not in missing_spx_keys for k in user_meta_keys)
@@ -244,7 +255,7 @@ def load_metadata_csv_file(fp, meta_keys):
         rows = [row for row in meta_reader]
 
     # determine if tidy format
-    if set(rows[0]) & set(meta_keys):
+    if len(set(rows[0]) & set(meta_keys)) > 1:
         is_tidy = True
         merge_keys = tuple(rows[0])
         for row in rows[1:]:
@@ -252,7 +263,7 @@ def load_metadata_csv_file(fp, meta_keys):
 
     else:
         merge_keys = tuple(row[0] for row in rows)
-        if set(merge_keys) & set(meta_keys):
+        if len(set(merge_keys) & set(meta_keys)) > 1:
             entries = len(rows[0])
             for ix in range(1, entries):
                 col = (row[ix] for row in rows)
@@ -277,12 +288,50 @@ def append_metadata(fcs_objs, meta_keys, master_csv, fn_out):
         print('>>> No metadata keys match / data located')
         return
 
-    all_fcs_objs = batch_load_fcs_from_csv(merge_keys, merge_data)
-    all_fcs_objs.extend(fcs_objs)
-    merge_keys = add_param_mean(all_fcs_objs, merge_keys)
+    csv_fcs_objs = batch_load_fcs_from_csv(merge_keys, merge_data)
 
+    # >>> check duplicate fcs metadata entries
+    comparison_keys = [key for key in merge_keys if key in meta_keys]
+
+    csv_fcs_hashes = set(fcs.meta_hash(comparison_keys) for fcs in csv_fcs_objs)
+    incoming_hashes = [fcs.meta_hash(comparison_keys) for fcs in fcs_objs]
+    hash_filter = [md_hash not in csv_fcs_hashes for md_hash in incoming_hashes]
+
+    all_fcs_objs = []
+    all_fcs_objs.extend(csv_fcs_objs)
+
+    if not all(hash_filter):
+        unique_fcs = tuple(compress(fcs_objs, hash_filter))
+        if not unique_fcs:
+            print('>>> No unique fcs files to append to master csv')
+            return
+        else:
+            all_fcs_objs.extend(unique_fcs)
+    else:
+        all_fcs_objs.extend(fcs_objs)
+
+    merge_keys = add_param_mean(all_fcs_objs, merge_keys)
     csv_out_path = merge_metadata(all_fcs_objs, merge_keys, is_tidy, fn_out)
     print('>>> fcs metadata appended to: {}'.format(csv_out_path))
+
+
+# def append_metadata(fcs_objs, meta_keys, master_csv, fn_out):
+#     merge_keys, merge_data, is_tidy = load_metadata_csv_file(master_csv, meta_keys)
+#
+#     if not all((merge_keys, merge_data)):
+#         print('>>> No metadata keys match / data located')
+#         return
+#
+#     all_fcs_objs = batch_load_fcs_from_csv(merge_keys, merge_data)
+#     # >>> check dup entries
+#
+#     all_fcs_objs.extend(fcs_objs)
+#     merge_keys = add_param_mean(all_fcs_objs, merge_keys)
+#
+#
+#     csv_out_path = merge_metadata(all_fcs_objs, merge_keys, is_tidy, fn_out)
+#     print('>>> fcs metadata appended to: {}'.format(csv_out_path))
+#
 
 
 # ------------------------------------------------------------------------------
