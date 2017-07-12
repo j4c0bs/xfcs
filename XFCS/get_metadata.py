@@ -3,11 +3,12 @@
 import argparse
 from itertools import compress
 import os
+import sys
 import time
 
 from XFCS.FCSFile.FCSFile import FCSFile
+from XFCS.utils import metadata_csv, metadata_time
 from XFCS.utils.locator import locate_fcs_files
-from XFCS.utils import metadata_csv
 from XFCS.utils.metadata_stats import add_param_mean
 from XFCS.version import VERSION
 
@@ -116,7 +117,6 @@ def load_metadata(paths, to_csv=True):
         fcs = FCSFile()
         fcs.load(open(filepath, 'rb'))
         if to_csv:
-            # fcs.set_param('SRC_FILE', os.path.abspath(src_file))
             src_dir, src_file = os.path.split(os.path.abspath(filepath))
             fcs.set_param('SRC_DIR', src_dir)
             fcs.set_param('SRC_FILE', src_file)
@@ -200,20 +200,38 @@ def batch_separate_metadata(fcs_objs, meta_keys, tidy):
 
 
 # ------------------------------------------------------------------------------
-def collect_filepaths(in_paths, recursive, limit=0):
-    """Locate and limit fcs filepaths"""
+def get_fcs_paths(in_paths, recursive, limit=0):
+    """Locate and sort / limit fcs filepaths if not using --input arg.
+        Dir search, sorting and limit is disabled if in_paths is not empty.
+        In dir search, files are sorted by filename. If limit is enabled, an
+        attempt to sort via os.path.getctime is made. If this fails, further
+        sorting is attempted within main() based on sort_confirmed value.
+
+    Args:
+        in_paths: iterable of fcs paths from args.input, disables dir search.
+        recursive: bool - enables recursive dir search.
+        limit: int - concatenates located files if using dir search.
+
+    Returns:
+        fcs_paths: iterable of fcs filepaths.
+        sort_confirmed: bool - confirms attempt to sort paths by ctime.
+    """
 
     if in_paths:
         fcs_paths = [infile.name for infile in in_paths if infile.name.lower().endswith('.fcs')]
     else:
         fcs_paths = locate_fcs_files(recursive)
 
-    if limit:
-        # TODO: safe ctime -> or use $DATE in metadata
-        fcs_paths.sort(key=lambda fn: os.path.getctime(fn))
-        fcs_paths = fcs_paths[-limit:]
+    sort_confirmed = True
 
-    return fcs_paths
+    if limit and not in_paths:
+        by_ctime = metadata_time.sort_by_ctime(fcs_paths)
+        if by_ctime:
+            fcs_paths = by_ctime[-limit:]
+        else:
+            sort_confirmed = False
+
+    return fcs_paths, sort_confirmed
 
 
 # ------------------------------------------------------------------------------
@@ -273,13 +291,22 @@ def main():
     """
 
     args = parse_arguments()
-    paths = collect_filepaths(args.input, args.recursive, args.limit)
+    paths, sort_confirmed = get_fcs_paths(args.input, args.recursive, args.limit)
     print('>>> fcs files located:', len(paths))
     if not paths:
-        return
+        sys.exit(0)
 
     to_csv = not args.get_kw
     fcs_objs, meta_keys = load_metadata(paths, to_csv)
+
+    if not sort_confirmed:
+        sorted_fcs = metadata_time.sort_by_time_params(fcs_objs)
+        if not sorted_fcs:
+            print('>>> Unable to access any time related metadata for fcs files.')
+            print('>>> Disable --limit option in command and manually list --input files.')
+            sys.exit(0)
+
+        fcs_objs = sorted_fcs[-args.limit:]
 
     if args.get_kw:
         kw_prefs_filename = write_kw_prefs(meta_keys)

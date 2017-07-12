@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
 
 """
+FCS file reader supporting file format spec 3.0, 3.1.
+Data extraction currently supports LIST MODE only.
+
 FCS3.0 http://murphylab.web.cmu.edu/FCSAPI/FCS3.html
 FCS3.1
 A data set is a (HEADER, TEXT, DATA) group. Multiple data sets in one file is deprecated.
+
+Required FCS primary TEXT segment keywords:
+$BEGINANALYSIS $BEGINDATA $BEGINSTEXT $BYTEORD $DATATYPE $ENDANALYSIS $ENDDATA
+$ENDSTEXT $MODE $NEXTDATA $PAR $PnB $PnE $PnN $PnR $TOT
 """
 
 import sys
@@ -265,6 +272,10 @@ class FCSFile(object):
     def has_param(self, key):
         """Return True if given parameter key is in text section"""
         return (key in self.__key_set)
+
+    def param_is_numeric(self, param):
+        """Return True if param value is numeric"""
+        return isinstance(self.param(param), (float, int))
 
     def param(self, param):
         """Return the value for the given parameter"""

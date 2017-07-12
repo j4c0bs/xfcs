@@ -4,15 +4,23 @@ import re
 from statistics import mean
 
 # ------------------------------- $Px STATS ------------------------------------
-def find_mean_spx_param_keys(user_meta_keys):
-    """
-        example input: $P10V_MEAN or $P10V_MEAN_5
+def find_spx_mean_params(user_meta_keys):
+    """Finds any user specified parameter keywords to include a rolling mean value.
+        Example keywords: $P10V_MEAN, $P10V_MEAN_5, $TOT_MEAN
+
+    Arg:
+        user_meta_keys: iterable of param keys read from user_kw_prefs text file.
+
+    Returns:
+        param_key_ranges: iterable of tuples containing -
+        parameter key, parameter_MEAN key, historic range int for rolling mean.
     """
 
-    spx_key_range = re.compile(r'^(\$P\d+V)_MEAN(_\d+)?$')
+    user_mean_key = re.compile(r'^(.+)_MEAN(_\d+)?$')
+
     param_key_ranges = []
     for param_mean_key in user_meta_keys:
-        kw_match = spx_key_range.match(param_mean_key)
+        kw_match = user_mean_key.match(param_mean_key)
 
         if kw_match:
             param_key, mean_range = kw_match.groups()
@@ -28,7 +36,19 @@ def find_mean_spx_param_keys(user_meta_keys):
 
 
 def add_param_mean(fcs_objs, user_meta_keys):
-    param_key_ranges = find_mean_spx_param_keys(user_meta_keys)
+    """Calculates rolling mean for any user selected parameter keyword.
+        Confirms parameter's have numeric values and exist within each fcs file.
+
+    Args:
+        fcs_objs: iterable of loaded FCSFile instances.
+        user_meta_keys: iterable of param keys read from user_kw_prefs text file.
+
+    Returns:
+        user_meta_keys: param keyword list filtered for any missing or malformed
+            user keywords.
+    """
+
+    param_key_ranges = find_spx_mean_params(user_meta_keys)
     if not param_key_ranges:
         return user_meta_keys
 
@@ -38,6 +58,9 @@ def add_param_mean(fcs_objs, user_meta_keys):
     for param_key, param_mean_key, mean_range in param_key_ranges:
         if not any(fcs.has_param(param_key) for fcs in fcs_objs):
             missing_spx_keys.extend((param_key, param_mean_key))
+            continue
+        elif not all(fcs.param_is_numeric(param_key) for fcs in fcs_objs):
+            missing_spx_keys.append(param_mean_key)
             continue
 
         volt_keys.append((param_key, param_mean_key))
@@ -56,7 +79,7 @@ def add_param_mean(fcs_objs, user_meta_keys):
     # force parameter keys included if only $Px_MEAN in user kw file
     for (param_key, param_mean_key) in volt_keys:
         if param_key not in user_meta_keys:
-            ix = user_meta_keys.find(param_mean_key)
+            ix = user_meta_keys.index(param_mean_key)
             user_meta_keys.insert(ix, param_key)
 
     if missing_spx_keys:

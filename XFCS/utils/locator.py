@@ -4,6 +4,9 @@ import glob
 import os
 # ------------------------------------------------------------------------------
 def locate_fcs_files(recursive=False):
+    """Returns sorted from oldest -> most recent if name format uses date.
+    """
+
     glob_loc = '[!.]*.fcs'
     if recursive:
         rec_loc_path = os.path.join(os.curdir, '**', glob_loc)
