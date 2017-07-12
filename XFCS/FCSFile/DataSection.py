@@ -16,16 +16,21 @@ def x_endian(s):
     else:
         raise ValueError
 
+
 # ------------------------------------------------------------------------------
 class DataSection(object):
-    def __init__(self, text, data, file_name, keep_raw=False):
+    def __init__(self, text=None, data=None, file_name='', keep_raw=False):
         self.text = text
         self.data = data
         self.file_name = file_name
+
         self.keep_raw = keep_raw
+
         self.load_metadata(text)
+
         self.data_name = None
-        self.ver_id = None
+
+        self.ver_id = None # ev_log
         self.parameters = []
         self.raw_data = None
         self.bxn = None
@@ -40,11 +45,10 @@ class DataSection(object):
     def load_metadata(self, text):
         self.metadata = text
 
-        # self.sBEGINDATA = text['$BEGINDATA']
-        # self.sENDDATA = text['$ENDDATA']
-
+        # >>> only used in conform check
         self.sDATATYPE = text['$DATATYPE']
         self.sMODE = text['$MODE']
+
         self.sBYTEORDER = x_endian(text['$BYTEORD'])
         self.sPAR = int(text['$PAR'])
         self.sTOT = int(text['$TOT'])
@@ -54,6 +58,7 @@ class DataSection(object):
         self.sSMNO = text.get('$SMNO', None)
         self.sID = text.get('IC$WellID', None)
         self.sTR = text.get('$TR', None)
+
 
         self.flc_param_numbers = []
         if text.get('$SPILLOVER', None):
@@ -99,7 +104,7 @@ class DataSection(object):
 
         for n in range(1,self.sPAR+1):
             param_num = '$P' + str(n)
-            attr_sfx = ['N','S','B','E','R']
+            attr_sfx = ['N', 'S', 'B', 'E', 'R']
             attr = [n]
             for attr_x in attr_sfx:
                 attr.append(self.text[param_num+attr_x])

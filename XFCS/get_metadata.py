@@ -112,15 +112,14 @@ def write_kw_prefs(meta_keys):
 
 
 # ------------------------------------------------------------------------------
-def load_metadata(paths, to_csv=True):
+def load_metadata(paths):
     """
         --> makes hashtable -> filepath : fcs file class instance
         meta_keys == all_keys w any new keys extended
         replaced -> meta_keys = ['FILEPATH'] with 'SRC_FILE'
 
-    Args:
+    Arg:
         paths: iterable of fcs filepaths
-        to_csv: bool - disabled if no csv file is being written.
 
     Returns:
         fcs_objs:
@@ -134,7 +133,6 @@ def load_metadata(paths, to_csv=True):
     for filepath in paths:
         fcs = FCSFile()
         fcs.load(open(filepath, 'rb'))
-        # if to_csv:
         src_dir, src_file = os.path.split(os.path.abspath(filepath))
         fcs.set_param('CSV_CREATED', time.strftime('%m/%d/%y %H:%M:%S'))
         fcs.set_param('SRC_DIR', src_dir)
@@ -146,15 +144,6 @@ def load_metadata(paths, to_csv=True):
 
     return fcs_objs, meta_keys
 
-
-# ------------------------------------------------------------------------------
-
-# def apply_keyword_filter(fcs_objs, kw_filter_file):
-#     """Gets user meta kw and applies stats if selected"""
-#
-#     user_meta_keys = read_kw_prefs(kw_filter_file)
-#     valid_keys = add_param_mean(fcs_objs, user_meta_keys)
-#     return valid_keys
 
 # ------------------------------------------------------------------------------
 def merge_metadata(fcs_objs, meta_keys, tidy, fn_out=''):
@@ -317,10 +306,9 @@ def main():
     if not paths:
         sys.exit(0)
 
-    to_csv = not args.get_kw
-    fcs_objs, meta_keys = load_metadata(paths, to_csv)
+    fcs_objs, meta_keys = load_metadata(paths)
 
-    # add arg to force param time sort?
+    # TODO: add arg to force param time sort?
     if not sort_confirmed:
         sorted_fcs = metadata_time.sort_by_time_params(fcs_objs)
         if not sorted_fcs:

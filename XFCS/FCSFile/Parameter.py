@@ -39,11 +39,6 @@ class Parameter(object):
     def archyperbolicsine_scale(self, X):
         return np.log(X + np.sqrt(np.exp2(X) + 1))
 
-    # def check_log(self):
-    #     if not self.log:
-    #         self.logrange = 0
-    #     else:
-    #         self.logrange = int(self.logrange)
 
     # ------------------------------ ATTR LOG ----------------------------------
     def get_attr(self, xc=True, fc=False):

@@ -111,7 +111,7 @@ def sort_by_time_params(fcs_objs):
 
     meta_dates = __get_all(fcs_objs, '$DATE')
     meta_time = __get_all(fcs_objs, '$ETIM')
-    
+
     if not any((meta_dates, meta_time)):
         return []
 

@@ -38,7 +38,7 @@ def filter_ascii32(hex_str):
     if hex_char_set == twozero:
         return 0
     else:
-        return int(hex_str,16)
+        return int(hex_str, 16)
 
 
 # ------------------------------------------------------------------------------
@@ -87,6 +87,7 @@ class FCSFile(object):
         """
 
         self.version = None
+        self.name = ''
         self.__header = None
         self.text = {}
         self.param_keys = None
@@ -144,7 +145,10 @@ class FCSFile(object):
         # Read the TEXT section
         f.seek(self.__header['text_start'])
         text_delimiter = f.read(1).decode("utf-8")
-        tokens = f.read(self.__header['text_end'] - self.__header['text_start']).decode("utf-8").split(text_delimiter)
+        # tokens = f.read(self.__header['text_end'] - self.__header['text_start'])
+        # .decode("utf-8").split(text_delimiter)
+        _read_len = self.__header['text_end'] - self.__header['text_start']
+        tokens = f.read(_read_len).decode("utf-8").split(text_delimiter)
 
         # Collect Parameter keys and values for text map
         all_keys = [key.strip() for key in tokens[::2] if key]
@@ -204,7 +208,7 @@ class FCSFile(object):
 
 
     def check_file_standards_conformity(self):
-        """Confirms metadata test or exits"""
+        """Confirms fcs file format standards or exits"""
 
         if not self.metadata:
             self.metadata = Metadata(self.text)
@@ -281,7 +285,7 @@ class FCSFile(object):
         if self.__n_keys != len(self.text):
             self.__update_key_set()
 
-        return (key in self.__key_set)
+        return key in self.__key_set
 
 
     def param_is_numeric(self, param):
