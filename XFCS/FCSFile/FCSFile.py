@@ -91,6 +91,7 @@ class FCSFile(object):
         self.text = {}
         self.param_keys = None
         self.__key_set = {}
+        self.__n_keys = 0
         self.metadata = None
         self.data_hex_bytes = None
         self.data = None
@@ -134,11 +135,11 @@ class FCSFile(object):
 
         f.seek(10)
         self.__header = {"text_start": int(f.read(8).decode("utf-8")),
-                       "text_end": int(f.read(8).decode("utf-8")),
-                       "data_start": int(f.read(8).decode("utf-8")),
-                       "data_end": int(f.read(8).decode("utf-8")),
-                       "analysis_start": filter_ascii32(f.read(8).hex()),
-                       "analysis_end": filter_ascii32(f.read(8).hex())}
+                         "text_end": int(f.read(8).decode("utf-8")),
+                         "data_start": int(f.read(8).decode("utf-8")),
+                         "data_end": int(f.read(8).decode("utf-8")),
+                         "analysis_start": filter_ascii32(f.read(8).hex()),
+                         "analysis_end": filter_ascii32(f.read(8).hex())}
 
         # Read the TEXT section
         f.seek(self.__header['text_start'])
@@ -156,7 +157,7 @@ class FCSFile(object):
         else:
             self.param_keys = tuple(all_keys)
 
-        self.__key_set = set(self.param_keys)
+        self.__update_key_set()
 
 
     def load_data(self, f):
@@ -240,7 +241,12 @@ class FCSFile(object):
             self.set_param(param, value)
 
         self.param_keys = tuple(keys_in)
-        self.__key_set = set(self.param_keys)
+        self.__update_key_set()
+
+
+    def __update_key_set(self):
+        self.__key_set = set(self.text.keys())
+        self.__n_keys = len(self.__key_set)
 
 
     def meta_hash(self, meta_keys=None):
@@ -271,19 +277,27 @@ class FCSFile(object):
 
     def has_param(self, key):
         """Return True if given parameter key is in text section"""
+
+        if self.__n_keys != len(self.text):
+            self.__update_key_set()
+
         return (key in self.__key_set)
+
 
     def param_is_numeric(self, param):
         """Return True if param value is numeric"""
         return isinstance(self.param(param), (float, int))
 
+
     def param(self, param):
         """Return the value for the given parameter"""
         return self.text.get(param, 'N/A')
 
+
     def numeric_param(self, param):
-        """Return the numeric value for the given parameter"""
+        """Return numeric value for the given parameter or zero"""
         return self.text.get(param, 0)
+
 
     def set_param(self, param, value):
         """Set the value of the given parameter"""
@@ -291,14 +305,15 @@ class FCSFile(object):
             value = filter_numeric(value)
         self.text[param] = value
 
+
     def __write(self, f):
         """Write an FCS file (not implemented)"""
         raise NotImplementedError("Can't write FCS files yet")
 
 
 # ------------------------------------------------------------------------------
-if __name__ == "__main__":
-
-    x = FCSFile()
-    x.load(open(sys.argv[1], 'rb'))
-    print(x.text)
+# if __name__ == "__main__":
+#
+#     x = FCSFile()
+#     x.load(open(sys.argv[1], 'rb'))
+#     print(x.text)

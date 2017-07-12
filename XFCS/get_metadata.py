@@ -13,6 +13,9 @@ from XFCS.utils.metadata_stats import add_param_mean
 from XFCS.version import VERSION
 
 # ------------------------------------------------------------------------------
+FORCED_SRC_KEYS = ('CSV_CREATED', 'SRC_DIR', 'SRC_FILE')
+
+# ------------------------------------------------------------------------------
 def parse_arguments():
     """Parse command line arguments."""
 
@@ -68,7 +71,8 @@ def parse_arguments():
 
 # ------------------------------ KEYWORD PREFS ---------------------------------
 def read_kw_prefs(kw_filter_file):
-    """Read user selected keywords from text file.
+    """Read user selected keywords from text file and insert forced src keys
+        if not included by user.
 
     Arg:
         kw_filter_file: filepath to user kw text file.
@@ -80,6 +84,11 @@ def read_kw_prefs(kw_filter_file):
     user_meta_keys = None
     with open(kw_filter_file, 'r') as kw_file:
         user_meta_keys = [line.strip() for line in kw_file if line.strip() != '']
+
+    for key in reversed(FORCED_SRC_KEYS):
+        if key not in user_meta_keys:
+            user_meta_keys.insert(0, key)
+
     return user_meta_keys
 
 
@@ -108,19 +117,28 @@ def load_metadata(paths, to_csv=True):
         --> makes hashtable -> filepath : fcs file class instance
         meta_keys == all_keys w any new keys extended
         replaced -> meta_keys = ['FILEPATH'] with 'SRC_FILE'
+
+    Args:
+        paths: iterable of fcs filepaths
+        to_csv: bool - disabled if no csv file is being written.
+
+    Returns:
+        fcs_objs:
+        meta_keys:
     """
 
     fcs_objs = []
-    meta_keys = ['SRC_DIR', 'SRC_FILE', 'CSV_CREATED']
+    meta_keys = []
+    meta_keys.extend(FORCED_SRC_KEYS)
 
     for filepath in paths:
         fcs = FCSFile()
         fcs.load(open(filepath, 'rb'))
-        if to_csv:
-            src_dir, src_file = os.path.split(os.path.abspath(filepath))
-            fcs.set_param('SRC_DIR', src_dir)
-            fcs.set_param('SRC_FILE', src_file)
-            fcs.set_param('CSV_CREATED', time.strftime('%m/%d/%y %H:%M:%S'))
+        # if to_csv:
+        src_dir, src_file = os.path.split(os.path.abspath(filepath))
+        fcs.set_param('CSV_CREATED', time.strftime('%m/%d/%y %H:%M:%S'))
+        fcs.set_param('SRC_DIR', src_dir)
+        fcs.set_param('SRC_FILE', src_file)
 
         # TODO: make key check more efficient
         meta_keys.extend((mk for mk in fcs.param_keys if mk not in meta_keys))
@@ -130,13 +148,13 @@ def load_metadata(paths, to_csv=True):
 
 
 # ------------------------------------------------------------------------------
-def apply_keyword_filter(fcs_objs, kw_filter_file):
-    """Gets user meta kw and applies stats if selected"""
 
-    user_meta_keys = read_kw_prefs(kw_filter_file)
-    valid_keys = add_param_mean(fcs_objs, user_meta_keys)
-    return valid_keys
-
+# def apply_keyword_filter(fcs_objs, kw_filter_file):
+#     """Gets user meta kw and applies stats if selected"""
+#
+#     user_meta_keys = read_kw_prefs(kw_filter_file)
+#     valid_keys = add_param_mean(fcs_objs, user_meta_keys)
+#     return valid_keys
 
 # ------------------------------------------------------------------------------
 def merge_metadata(fcs_objs, meta_keys, tidy, fn_out=''):
@@ -177,7 +195,7 @@ def fcs_to_csv_path(fcs_name, fcs_dir='', tidy=False):
 
 
 def batch_separate_metadata(fcs_objs, meta_keys, tidy):
-    """Batch process all fcs to their own csv file.
+    """Batch process all fcs to their own, separate csv file.
 
     Args:
         fcs_objs: iterable of loaded FCSFile instances.
@@ -188,10 +206,9 @@ def batch_separate_metadata(fcs_objs, meta_keys, tidy):
         csv_paths: iterable of filepaths to generated csv files.
     """
 
-    src_keys = ('SRC_DIR', 'SRC_FILE', 'CSV_CREATED')
     csv_paths = []
     for fcs in fcs_objs:
-        sep_keys = tuple(key for key in meta_keys if fcs.has_param(key) or key in src_keys)
+        sep_keys = tuple(key for key in meta_keys if fcs.has_param(key))
         # csv_fn = fcs_to_csv_path(fcs.param('SRC_FILE'), fcs.param('SRC_DIR'), tidy=tidy)
         csv_fn = fcs_to_csv_path(fcs.param('SRC_FILE'), tidy=tidy)
         metadata_csv.write_file((fcs,), sep_keys, csv_fn, tidy)
@@ -247,7 +264,11 @@ def batch_load_fcs_from_csv(merge_keys, merge_data):
 
 
 def append_metadata(fcs_objs, meta_keys, master_csv, fn_out):
-    """Append new fcs file(s) metadata to existing fcs metadata csv file."""
+    """Append new fcs file(s) metadata to existing fcs metadata csv file.
+        USER_KW_PREFS is bypassed and keyword set from master csv acts as
+        keyword filter.
+
+    """
 
     merge_keys, merge_data, is_tidy = metadata_csv.read_file(master_csv, meta_keys)
 
@@ -299,6 +320,7 @@ def main():
     to_csv = not args.get_kw
     fcs_objs, meta_keys = load_metadata(paths, to_csv)
 
+    # add arg to force param time sort?
     if not sort_confirmed:
         sorted_fcs = metadata_time.sort_by_time_params(fcs_objs)
         if not sorted_fcs:
@@ -319,12 +341,18 @@ def main():
 
     else:
         if args.kw_filter:
-            meta_keys = apply_keyword_filter(fcs_objs, args.kw_filter.name)
+            meta_keys = read_kw_prefs(args.kw_filter.name)
+            check_user_mean_keys = any('_MEAN' in key for key in meta_keys)
+        else:
+            check_user_mean_keys = False
 
         if args.sepfiles:
             csv_paths = batch_separate_metadata(fcs_objs, meta_keys, args.tidy)
             print('>>> csv files written: {}'.format(len(csv_paths)))
         else:
+            if check_user_mean_keys:
+                meta_keys = add_param_mean(fcs_objs, meta_keys)
+
             fn_out = '' if not args.output else args.output.name
             csv_out_path = merge_metadata(fcs_objs, meta_keys, args.tidy, fn_out)
             print('>>> csv file written to: {}'.format(csv_out_path))
