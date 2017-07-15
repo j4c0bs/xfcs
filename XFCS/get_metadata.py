@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+# TODO: if --input, use fcs filenames --> csv filenames <---<---<---<---<---<---
+
 import argparse
 from itertools import compress
 import os
@@ -132,7 +134,8 @@ def load_metadata(paths):
 
     for filepath in paths:
         fcs = FCSFile()
-        fcs.load(open(filepath, 'rb'))
+        # fcs.load(open(filepath, 'rb'))
+        fcs.load(filepath)
         src_dir, src_file = os.path.split(os.path.abspath(filepath))
         fcs.set_param('CSV_CREATED', time.strftime('%m/%d/%y %H:%M:%S'))
         fcs.set_param('SRC_DIR', src_dir)
