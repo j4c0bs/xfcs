@@ -18,6 +18,9 @@
     $ENDSTEXT $MODE $NEXTDATA $PAR $PnB $PnE $PnN $PnR $TOT
 """
 
+from itertools import chain, compress
+import re
+import struct
 # import sys
 
 from XFCS.FCSFile.DataSection import DataSection
@@ -94,6 +97,8 @@ class FCSFile(object):
 
         self.version = None
         self.name = ''
+        self.filepath = ''
+        self.datatype = ''
         self._fcs = None
         self.__header = None
         self.text = {}
@@ -112,7 +117,7 @@ class FCSFile(object):
         """Load an FCS file and confirm version id is supported.
 
             Arg:
-                f: A file descriptor or filepath to fcs file
+                f: A fcs filepath.
             Returns:
                 f: A file descriptor
             Raises:
@@ -121,6 +126,8 @@ class FCSFile(object):
 
         fcs_obj = open(fcs_file, 'rb')
         self.name = fcs_obj.name
+        self.filepath = fcs_file
+        print('\n---> fcs.load({})'.format(self.name))
         version_id = fcs_obj.read(6).decode("utf-8")
 
         if version_id in ('FCS3.0', 'FCS3.1'):
@@ -140,12 +147,13 @@ class FCSFile(object):
         """
 
         fcs_obj.seek(10)
-        self.__header = {'text_start': int(fcs_obj.read(8).decode('utf-8')),
-                         'text_end': int(fcs_obj.read(8).decode('utf-8')),
-                         'data_start': int(fcs_obj.read(8).decode('utf-8')),
-                         'data_end': int(fcs_obj.read(8).decode('utf-8')),
-                         'analysis_start': filter_ascii32(fcs_obj.read(8).hex()),
-                         'analysis_end': filter_ascii32(fcs_obj.read(8).hex())}
+        self.__header = {
+            'text_start': int(fcs_obj.read(8).decode('utf-8')),
+            'text_end': int(fcs_obj.read(8).decode('utf-8')),
+            'data_start': int(fcs_obj.read(8).decode('utf-8')),
+            'data_end': int(fcs_obj.read(8).decode('utf-8')),
+            'analysis_start': filter_ascii32(fcs_obj.read(8).hex()),
+            'analysis_end': filter_ascii32(fcs_obj.read(8).hex())}
 
         # Read the TEXT section
         fcs_obj.seek(self.__header['text_start'])
@@ -165,28 +173,103 @@ class FCSFile(object):
             self.param_keys = tuple(all_keys)
 
         self.__update_key_set()
+        self._load_metadata()
+
+
+    def _confirm_required_keywords(self):
+        keywords = [
+            '$BEGINANALYSIS', '$BEGINDATA', '$BEGINSTEXT', '$BYTEORD',
+            '$DATATYPE', '$ENDANALYSIS', '$ENDDATA', '$ENDSTEXT', '$MODE',
+            '$NEXTDATA', '$PAR', '$TOT']
+
+        spx = re.compile(r'^\$P\d+[BENR]$')
+        all_spx = [kw for kw in self.param_keys if spx.match(kw)]
+        keywords.extend(all_spx)
+        required_keywords = tuple(kw in self.__key_set for kw in keywords)
+        required_params = len(all_spx) == self.text['$PAR'] * 4
+
+        if not all(required_keywords):
+            missing_keywords = tuple(compress(keywords, required_keywords))
+            print('--> missing keywords:', missing_keywords)
+            status = False
+        elif not required_params:
+            print('--> missing $PnX keywords')
+            status = False
+        else:
+            status = True
+        return status
+
+    def _verify_mode_type(self):
+        list_mode = self.text['$MODE'] == 'L'
+        supported_datatype = self.datatype in ('I', 'F', 'D')
+        return list_mode, supported_datatype
+
+    def _load_metadata(self):
+
+        self.datatype = self.text['$DATATYPE'].upper()
+
+        req_kws = self._confirm_required_keywords()
+        list_mode, supported_datatype = self._verify_mode_type()
+        one_data_set = self.text.get('$NEXTDATA') == 0
+
+        checks = (req_kws, list_mode, supported_datatype, one_data_set)
+        check_txt = ('req_kws', 'list_mode', 'supported_datatype', 'one_data_set')
+
+        if not all(checks):
+            print('---> FCS file format is invalid')
+            for check, txt in zip(checks, check_txt):
+                if not check:
+                    print('>>>', txt)
+        else:
+            print('---> FCS file format is valid')
 
         self.metadata = Metadata(self.text)
         self.spec = self.metadata.spec
 
 
     # --------------------------------------------------------------------------
-    def load_data(self):
+    def load_data(self, norm_count=False):
         if not self.__header:
             print('>>> No FCS file loaded.')
             return
-        elif not self.metadata.has_valid_format:
-            # TODO: raise Error instead
-            print('>>> ABORTING DATA EXTRACTION')
-            return
+        # elif not self.metadata.has_valid_format:
+        #     # TODO: raise Error instead
+        #     print('>>> ABORTING DATA EXTRACTION')
+        #     return
+        if self.datatype == 'I':
+            self.__read_int_data()
+            type_i = True
         else:
-            self.__read_data()
+            self.__read_float_data()
+            type_i = False
+
+        self._fcs.close()
+        self.data = DataSection(self.__raw_data, self.spec, type_i, norm_count)
 
         print('---> fcs.load_data: complete')
 
 
-    def __read_data(self):
-        print('---> reading __raw_data')
+    def __read_float_data(self):
+        data_start, data_end = self.__get_data_seek()
+        read_len = data_end - data_start
+        if read_len + 1 == self.spec.data_len:
+            read_len += 1
+
+        print('\nfcs.data.__read_float_data')
+        _diff = data_end - data_start
+        print('>>> data_start: {}, data_end: {}, diff: {}'.format(data_start, data_end, _diff))
+        print('--> spec.data_len', self.spec.data_len)
+
+        self._fcs.seek(data_start)
+        data_bytes = self._fcs.read(read_len)
+
+        fmt_type = self.datatype.lower()
+        flt_fmt = '{}{}'.format(self.spec.byteord, fmt_type)
+        fl_read = struct.Struct(flt_fmt)
+        self.__raw_data = tuple(chain.from_iterable(fl_read.iter_unpack(data_bytes)))
+
+
+    def __read_int_data(self):
 
         data_start, data_end = self.__get_data_seek()
         self._fcs.seek(data_start)
@@ -199,45 +282,28 @@ class FCSFile(object):
         bytes_to_int = int.from_bytes
         __raw_read = (self._fcs.read(nbytes) for _ in range(tot_reads))
         self.__raw_data = tuple(bytes_to_int(n, byteord) for n in __raw_read)
-        self._fcs.close()
 
-        proceed = (self.spec.par * self.spec.tot == len(self.__raw_data))
-        if not proceed:
-            print('>>> Length of data does not match number of parameters and events')
-            return
-        else:
-            print('---> __raw_data loaded')
-
-        self.data = DataSection(self.__raw_data, self.spec)
+        # proceed = (self.spec.par * self.spec.tot == len(self.__raw_data))
+        # if not proceed:
+        #     print('>>> Length of data does not match number of parameters and events')
+        #     return
+        # else:
+        #     print('---> fcs.__read_data: all raw data loaded')
 
 
     def __get_data_seek(self):
         data_start = self.__header['data_start']
         data_end = self.__header['data_end']
 
-        header_check_1 = (data_start == self.metadata.spec.begindata)
-        header_check_2 = (data_end == self.metadata.spec.enddata)
-
-        if not all((header_check_1, header_check_2)):
-            data_start = self.metadata.spec.begindata
-            data_end = self.metadata.spec.enddata
+        # header_check_1 = (data_start == self.metadata.spec.begindata)
+        # header_check_2 = (data_end == self.metadata.spec.enddata)
+        #
+        # if not all((header_check_1, header_check_2)):
+        if not (data_start and data_end):
+            data_start = self.spec.begindata
+            data_end = self.spec.enddata
 
         return data_start, data_end
-
-
-    # >>> move to fcs.data.write_csv
-    # >>> move to fcs.data.write_hdf5
-    # def write_data(self, filetype='csv'):
-    #     """Writes data section to csv or hdf5 file"""
-    #
-    #     if filetype == 'csv':
-    #         fn = self.datasection.store_csv_data(self.name)
-    #     elif filetype == 'hdf5':
-    #         fn = self.datasection.store_hdf5_data(self.name)
-    #     else:
-    #         fn = 'nothing extracted'
-    #
-    #     print('Data extracted to: {}'.format(fn))
 
 
     # --------------------------------------------------------------------------
