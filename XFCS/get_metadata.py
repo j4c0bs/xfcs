@@ -134,7 +134,6 @@ def load_metadata(paths):
 
     for filepath in paths:
         fcs = FCSFile()
-        # fcs.load(open(filepath, 'rb'))
         fcs.load(filepath)
         src_dir, src_file = os.path.split(os.path.abspath(filepath))
         fcs.set_param('CSV_CREATED', time.strftime('%m/%d/%y %H:%M:%S'))
@@ -172,7 +171,7 @@ def merge_metadata(fcs_objs, meta_keys, tidy, fn_out=''):
     metadata_csv.write_file(fcs_objs, meta_keys, csv_fn, tidy)
     return csv_fn
 
-
+# >>> move to utils
 def fcs_to_csv_path(fcs_name, fcs_dir='', tidy=False):
     """Convert fcs filename to csv_metadata filename."""
 
@@ -184,6 +183,18 @@ def fcs_to_csv_path(fcs_name, fcs_dir='', tidy=False):
         csv_fn = os.path.join(fcs_dir, csv_fn)
 
     return csv_fn
+
+
+def write_obj_metadata(fcs):
+    meta_keys = list(FORCED_SRC_KEYS)
+    meta_keys.extend(fcs.param_keys)
+    fcs_dir, fcs_name = os.path.split(fcs.filepath)
+    csv_fn = fcs_to_csv_path(fcs_name, fcs_dir)
+    fcs.set_param('CSV_CREATED', time.strftime('%m/%d/%y %H:%M:%S'))
+    fcs.set_param('SRC_DIR', fcs_dir)
+    fcs.set_param('SRC_FILE', fcs_name)
+    metadata_csv.write_file((fcs,), meta_keys, csv_fn, tidy=False)
+    print('--> metadata generated for:', fcs_name)
 
 
 def batch_separate_metadata(fcs_objs, meta_keys, tidy):
@@ -201,8 +212,9 @@ def batch_separate_metadata(fcs_objs, meta_keys, tidy):
     csv_paths = []
     for fcs in fcs_objs:
         sep_keys = tuple(key for key in meta_keys if fcs.has_param(key))
+        csv_fn = fcs_to_csv_path(fcs.name,  tidy=tidy)
         # csv_fn = fcs_to_csv_path(fcs.param('SRC_FILE'), fcs.param('SRC_DIR'), tidy=tidy)
-        csv_fn = fcs_to_csv_path(fcs.param('SRC_FILE'), tidy=tidy)
+        # csv_fn = fcs_to_csv_path(fcs.param('SRC_FILE'), tidy=tidy)
         metadata_csv.write_file((fcs,), sep_keys, csv_fn, tidy)
         csv_paths.append(csv_fn)
     return csv_paths

@@ -31,68 +31,30 @@ def x_endian(byte_ord, type_i=True):
         raise ValueError
 
 
-# ------------------------------------------------------------------------------
+def test_spill_format(spill):
+    if ',' not in spill and not spill[0].isdigit():
+        return False
 
-# def verify_format(datatype, mode):
-#
-#     status = True
-#
-#     if mode != 'L':
-#         print('FCS MODE NOT SUPPORTED - LIST MODE ONLY:', mode)
-#         status = False
-#
-#     if datatype != 'I':
-#         print('FCS DATA TYPE NOT SUPPORTED:', datatype)
-#         status = False
-#
-#     return status
+    spill_sep = spill.split(',')
+    n_par = int(spill_sep[0])
+    if len(spill_sep) != (1 + n_par + n_par**2):
+        return False
 
-# def verify_bytes(word_len_set, par, tot):
-#     """Verify metadata values for byte word length and total length of data section.
-#         In a list mode fcs file with datatype I, all parameters have the same
-#         word length.
-#
-#         Total bit len of data = number params * number events * word length
-#
-#     Args:
-#         word_len_set: set of all parameters word length ($PnB) value.
-#         par: int - number of parameters.
-#         tot: int - total number of events recorded.
-#
-#     Returns:
-#         status: bool - False if any check failed.
-#         word_len: int - number of bits reserved per parameter event.
-#         data_len: int - total number of bytes to read for data section.
-#     """
-#
-#     status = True
-#     word_len = 0
-#     data_len = 0
-#
-#     if not word_len_set:
-#         print('DATA BYTE READ LENGTH MISSING:')
-#         status = False
-#     elif len(word_len_set) > 1:
-#         print('DATA BYTE READ LENGTH NOT STANDARD FOR ALL CHANNELS:')
-#         print(word_len_set)
-#         status = False
-#     else:
-#         word_len = word_len_set.pop()
-#         # TODO: confirm word lens are multiples of 8
-#         if not word_len or word_len % 8 != 0:
-#             print('DATA BYTE READ LENGTH NOT RECOGNIZED: {}'.format(word_len))
-#             status = False
-#
-#     if status:
-#         data_len = par * tot * word_len // 8
-#
-#     return status, word_len, data_len
+    for val in spill_sep[n_par + 1:]:
+        try:
+            float(val)
+        except ValueError:
+            return False
+
+    return True
+
 
 # ------------------------------------------------------------------------------
 class Metadata(object):
-    def __init__(self, text):
+    def __init__(self, version, text):
         """Initialize metadata section for FCS File"""
 
+        self.version = version
         self._text = text
         self._data_spec = {}
         self.__spec = None
@@ -139,7 +101,19 @@ class Metadata(object):
 
     def _set_optional_keywords(self):
         self._add_to_spec('$TIMESTEP', def_val=0)
-        self._add_to_spec('$SPILLOVER')
+        if self.version != 'FCS3.0' or '$SPILLOVER' in self._text:
+            self._add_to_spec('$SPILLOVER')
+        else:
+            v3_spill = None
+            sp_kws = ('$COMP', 'SPILL', 'SPILLOVER')
+            for kw in sp_kws:
+                spill = self._text.get(kw, None)
+                if spill and test_spill_format(spill):
+                    v3_spill = spill
+                    break
+
+            self._add_to_spec('$SPILLOVER', set_val=v3_spill)
+
 
     def _set_byteorder(self):
         type_i = self._text['$DATATYPE'] == 'I'

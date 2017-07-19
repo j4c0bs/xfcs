@@ -127,8 +127,9 @@ class FCSFile(object):
         fcs_obj = open(fcs_file, 'rb')
         self.name = fcs_obj.name
         self.filepath = fcs_file
-        print('\n---> fcs.load({})'.format(self.name))
+
         version_id = fcs_obj.read(6).decode("utf-8")
+        print('\n---> fcs.load({}) - vid:{}'.format(self.name, version_id))
 
         if version_id in ('FCS3.0', 'FCS3.1'):
             self.version = version_id
@@ -223,7 +224,7 @@ class FCSFile(object):
         else:
             print('---> FCS file format is valid')
 
-        self.metadata = Metadata(self.text)
+        self.metadata = Metadata(self.version, self.text)
         self.spec = self.metadata.spec
 
 
@@ -236,6 +237,7 @@ class FCSFile(object):
         #     # TODO: raise Error instead
         #     print('>>> ABORTING DATA EXTRACTION')
         #     return
+
         if self.datatype == 'I':
             self.__read_int_data()
             type_i = True
@@ -254,11 +256,6 @@ class FCSFile(object):
         read_len = data_end - data_start
         if read_len + 1 == self.spec.data_len:
             read_len += 1
-
-        print('\nfcs.data.__read_float_data')
-        _diff = data_end - data_start
-        print('>>> data_start: {}, data_end: {}, diff: {}'.format(data_start, data_end, _diff))
-        print('--> spec.data_len', self.spec.data_len)
 
         self._fcs.seek(data_start)
         data_bytes = self._fcs.read(read_len)
@@ -282,13 +279,6 @@ class FCSFile(object):
         bytes_to_int = int.from_bytes
         __raw_read = (self._fcs.read(nbytes) for _ in range(tot_reads))
         self.__raw_data = tuple(bytes_to_int(n, byteord) for n in __raw_read)
-
-        # proceed = (self.spec.par * self.spec.tot == len(self.__raw_data))
-        # if not proceed:
-        #     print('>>> Length of data does not match number of parameters and events')
-        #     return
-        # else:
-        #     print('---> fcs.__read_data: all raw data loaded')
 
 
     def __get_data_seek(self):

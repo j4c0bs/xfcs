@@ -1,9 +1,7 @@
 
 from itertools import islice
-import os
 
 import numpy as np
-import pandas as pd
 
 from XFCS.FCSFile.Parameter import Parameters
 # ------------------------------------------------------------------------------
@@ -22,8 +20,7 @@ class DataSection(object):
         self.__scale = None
         self.__compensated = None
         self.__scale_compensated = None
-        self.parameters = Parameters()
-        self.parameters.set_datatype(datatype_i)
+        self.parameters = Parameters(datatype_i)
         self._load_channels(raw_data, norm_count)
 
 
@@ -47,27 +44,18 @@ class DataSection(object):
 
         self._load_param_config()
         self.parameters.set_raw_values(raw_values)
-        self.parameters.set_channel_values(self.spec.timestep, norm_count)
-
-        print('---> fcs.data.__load_channels: all raw and channel value loaded')
-
+        self.parameters.load_reference_channels(self.spec.timestep, norm_count)
+        self.parameters.set_channel_values()
 
     def _load_param_config(self):
+
+        self.parameters.load_config(self.spec.channels)
+
         if self.spec.spillover:
             self.__load_spillover_matrix()
-
-        ch_spec = self.spec.channels
-        self.parameters.load_config(ch_spec, self._comp_matrix, self._comp_ids)
+            self.parameters.load_spillover(self._comp_matrix, self._comp_ids)
 
     # --------------------------------------------------------------------------
-
-    # def any_log_scaled(self):
-    #     return self.parameters.has_logscale
-    # def any_compensated(self):
-    #     return self.parameters.has_logscale
-
-    # --------------------------------------------------------------------------
-
     @property
     def raw(self):
         return self.parameters.get_raw()
@@ -86,57 +74,72 @@ class DataSection(object):
 
     @property
     def compensated(self):
-        self.__load_compensated_channels()
-        return self.parameters.get_compensated()
+        if self.spec.spillover:
+            return self.parameters.get_compensated()
+        else:
+            print('--> No $SPILLOVER data found within FCS Text Section.')
+            return None
 
     @property
     def scale_compensated(self):
-        self.__load_logscaled_compensated()
-        return self.parameters.get_scale_compensated()
+        if self.spec.spillover:
+            return self.parameters.get_scale_compensated()
+        else:
+            print('--> No $SPILLOVER data found within FCS Text Section.')
+            return None
 
     # --------------------------------------------------------------------------
 
     def __load_spillover_matrix(self):
-        # >>> check for neg vals
 
         spillover = self.spec.spillover.split(',')
         n_channels = int(spillover[0])
-        self._comp_ids = [int(n) for n in spillover[1:n_channels + 1]]
+
+        param_ids = [n for n in spillover[1:n_channels + 1]]
+        if all(id_.isdigit() for id_ in param_ids):
+            self._comp_ids = tuple(int(n) for n in param_ids)
+        else:
+            self._comp_ids = tuple(self.parameters.id_map[p_id] for p_id in param_ids)
+
         comp_vals = [float(n) for n in spillover[n_channels + 1:]]
         spill_matrix = np.array(comp_vals).reshape(n_channels, n_channels)
-        diagonals = np.unique(spill_matrix[np.diag_indices(n_channels)])
+        if np.any(spill_matrix < 0):
+            print('>>> spillover matrix contains negative values')
+            self._comp_matrix = spill_matrix
+            return
 
+        diagonals = np.unique(spill_matrix[np.diag_indices(n_channels)])
         if diagonals.size != 1:
-            print('Aborting fluorescence compensation')
-            return False
+            print('>>> Aborting fluorescence compensation')
+            return
 
         if diagonals.item(0) != 1:
             spill_matrix = spill_matrix / diagonals.item(0)
         self._comp_matrix = np.linalg.inv(spill_matrix)
 
 
-    def __load_compensated_channels(self):
-        if not self.spec.spillover:
-            print('--> No $SPILLOVER data found within FCS Text Section.')
-            return False
-
-        if not self.__matrix_loaded:
-            self.__load_spillover_matrix()
-
-        self.parameters.compensate_channel_values(self._comp_ids, self._comp_matrix)
-        print('---> fcs.data.parameters.compensated')
-        return True
-
-
-    def __load_logscaled_compensated(self):
-        if not self.spec.spillover:
-            print('--> No $SPILLOVER data found within FCS Text Section.')
-            return
-
-        if not self.__matrix_loaded:
-            self.get_compensated()
-
-        self.parameters.set_logscale_compensated(self._comp_ids, self._comp_matrix)
-        print('---> fcs.data.parameters.scale_compensated')
+    # def __load_compensated_channels(self):
+    #     if not self.spec.spillover:
+    #         print('--> No $SPILLOVER data found within FCS Text Section.')
+    #         return False
+    #
+    #     if not self.__matrix_loaded:
+    #         self.__load_spillover_matrix()
+    #
+    #     self.parameters.compensate_channel_values(self._comp_ids, self._comp_matrix)
+    #     print('---> fcs.data.parameters.compensated')
+    #     return True
+    #
+    #
+    # def __load_logscaled_compensated(self):
+    #     if not self.spec.spillover:
+    #         print('--> No $SPILLOVER data found within FCS Text Section.')
+    #         return
+    #
+    #     if not self.__matrix_loaded:
+    #         self.get_compensated()
+    #
+    #     self.parameters.set_logscale_compensated(self._comp_ids, self._comp_matrix)
+    #     print('---> fcs.data.parameters.scale_compensated')
 
     # --------------------------------------------------------------------------
