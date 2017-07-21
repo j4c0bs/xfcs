@@ -5,12 +5,8 @@ import numpy as np
 
 from XFCS.FCSFile.Parameter import Parameters
 # ------------------------------------------------------------------------------
-
-# ('begindata', 'byteord', 'channels', 'data_len', 'enddata',
-# 'par', 'spillover', 'timestep', 'tot', 'word_len')
-
 class DataSection(object):
-    def __init__(self, raw_data, spec, datatype_i, norm_count=False):
+    def __init__(self, raw_data, spec, norm_count, norm_time):
         self.spec = spec
         self._comp_ids = []
         self._comp_matrix = None
@@ -20,40 +16,29 @@ class DataSection(object):
         self.__scale = None
         self.__compensated = None
         self.__scale_compensated = None
-        self.parameters = Parameters(datatype_i)
-        self._load_channels(raw_data, norm_count)
+        self.parameters = Parameters(spec)
+        self._load_parameter_channels(raw_data, norm_count, norm_time)
 
 
-    def _get_dtype(self, word_len):
-
-        dmap = {'I':'uint{}'.format(word_len), 'F':'float32', 'D':'float64'}
-        mode_dtype = dmap.get(self.spec.datatype)
-        return np.dtype(mode_dtype)
-
-
-    def _load_channels(self, raw_data, norm_count):
+    def _load_parameter_channels(self, raw_data, norm_count, norm_time):
         par = self.spec.par
-        word_len = self.spec.word_len
-        dt = self._get_dtype(word_len)
+        mode_dtype = np.dtype(self.spec.txt_dtype)
 
         # slice all event data into separate channels
         raw_values = []
         for param_n in range(par):
-            raw_channel = np.array(tuple(islice(raw_data, param_n, None, par)), dtype=dt)
-            raw_values.append(raw_channel)
+            raw_ch = np.array(tuple(islice(raw_data, param_n, None, par)), dtype=mode_dtype)
+            raw_values.append(raw_ch)
 
-        self._load_param_config()
+        # set_ reference and channel values, load spillover matrix
         self.parameters.set_raw_values(raw_values)
-        self.parameters.load_reference_channels(self.spec.timestep, norm_count)
+        self.parameters.load_reference_channels(norm_count, norm_time)
         self.parameters.set_channel_values()
-
-    def _load_param_config(self):
-
-        self.parameters.load_config(self.spec.channels)
-
         if self.spec.spillover:
             self.__load_spillover_matrix()
-            self.parameters.load_spillover(self._comp_matrix, self._comp_ids)
+            self.parameters.set_spillover(self._comp_matrix, self._comp_ids)
+        print('---> All data read and channels loaded.')
+
 
     # --------------------------------------------------------------------------
     @property
@@ -77,7 +62,7 @@ class DataSection(object):
         if self.spec.spillover:
             return self.parameters.get_compensated()
         else:
-            print('--> No $SPILLOVER data found within FCS Text Section.')
+            print('>>> No $SPILLOVER data found within FCS Text Section.')
             return None
 
     @property
@@ -85,7 +70,7 @@ class DataSection(object):
         if self.spec.spillover:
             return self.parameters.get_scale_compensated()
         else:
-            print('--> No $SPILLOVER data found within FCS Text Section.')
+            print('>>> No $SPILLOVER data found within FCS Text Section.')
             return None
 
     # --------------------------------------------------------------------------
@@ -117,29 +102,5 @@ class DataSection(object):
             spill_matrix = spill_matrix / diagonals.item(0)
         self._comp_matrix = np.linalg.inv(spill_matrix)
 
-
-    # def __load_compensated_channels(self):
-    #     if not self.spec.spillover:
-    #         print('--> No $SPILLOVER data found within FCS Text Section.')
-    #         return False
-    #
-    #     if not self.__matrix_loaded:
-    #         self.__load_spillover_matrix()
-    #
-    #     self.parameters.compensate_channel_values(self._comp_ids, self._comp_matrix)
-    #     print('---> fcs.data.parameters.compensated')
-    #     return True
-    #
-    #
-    # def __load_logscaled_compensated(self):
-    #     if not self.spec.spillover:
-    #         print('--> No $SPILLOVER data found within FCS Text Section.')
-    #         return
-    #
-    #     if not self.__matrix_loaded:
-    #         self.get_compensated()
-    #
-    #     self.parameters.set_logscale_compensated(self._comp_ids, self._comp_matrix)
-    #     print('---> fcs.data.parameters.scale_compensated')
 
     # --------------------------------------------------------------------------

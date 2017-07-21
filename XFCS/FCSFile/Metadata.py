@@ -7,7 +7,9 @@ $ENDSTEXT $MODE $NEXTDATA $PAR $TOT $PnB $PnE $PnN $PnR
 """
 
 from collections import namedtuple
-# from operator import itemgetter
+from itertools import compress
+
+import numpy as np
 # ------------------------------------------------------------------------------
 def x_endian(byte_ord, type_i=True):
     """Determines data byte order based on fcs file format specifications.
@@ -32,6 +34,10 @@ def x_endian(byte_ord, type_i=True):
 
 
 def test_spill_format(spill):
+    """Confirms $SPILLOVER value has correct format.
+    [# channels], [ch 1,...,ch n], [val 1, ..., val n**2]
+    """
+
     if ',' not in spill and not spill[0].isdigit():
         return False
 
@@ -49,8 +55,19 @@ def test_spill_format(spill):
     return True
 
 
+def get_dtype_maxval(datatype, word_len):
+    dmap = {'I':'uint{}'.format(word_len), 'F':'float32', 'D':'float64'}
+    txt_dtype = dmap.get(datatype)
+    mode_dtype = np.dtype(txt_dtype)
+    n_info = np.iinfo if datatype == 'I' else np.finfo
+    max_value = n_info(mode_dtype).max + 1
+    return txt_dtype, max_value
+
+
 # ------------------------------------------------------------------------------
 class Metadata(object):
+    """Instantiates an FCS Metadata object"""
+
     def __init__(self, version, text):
         """Initialize metadata section for FCS File"""
 
@@ -90,9 +107,21 @@ class Metadata(object):
         channels = self._load_channel_spec()
         word_len = self._get_word_len(channels)
         data_len = self._get_data_len(word_len)
-        self._add_to_spec('channels', set_val=channels)
-        self._add_to_spec('word_len', set_val=word_len)
-        self._add_to_spec('data_len', set_val=data_len)
+
+        txt_dtype, max_val = get_dtype_maxval(self._text['$DATATYPE'], word_len)
+
+        attr_names = ('channels', 'word_len', 'data_len', 'txt_dtype', 'max_val')
+        vals = (channels, word_len, data_len, txt_dtype, max_val)
+
+        for attr_name, val in zip(attr_names, vals):
+            self._add_to_spec(attr_name, set_val=val)
+
+        # self._add_to_spec('channels', set_val=channels)
+        # self._add_to_spec('word_len', set_val=word_len)
+        # self._add_to_spec('data_len', set_val=data_len)
+        # self._add_to_spec('txt_dtype', set_val=txt_dtype)
+        # self._add_to_spec('max_val', set_val=max_val)
+
 
     def _required_keywords(self):
         _read_keys = ('$BEGINDATA', '$ENDDATA', '$PAR', '$TOT', '$DATATYPE')
@@ -119,6 +148,8 @@ class Metadata(object):
         type_i = self._text['$DATATYPE'] == 'I'
         byteord = x_endian(self._text['$BYTEORD'], type_i)
         self._add_to_spec('$BYTEORD', set_val=byteord)
+        self._add_to_spec('type_i', set_val=type_i)
+
 
     def _get_word_len(self, channels):
         all_word_len = set(ch_val['B'] for ch_val in channels.values())
@@ -127,9 +158,11 @@ class Metadata(object):
         else:
             return all_word_len.pop()
 
+
     def _get_data_len(self, word_len):
         par, tot = self._text['$PAR'], self._text['$TOT']
         return par * tot * word_len // 8
+
 
     def _load_channel_spec(self):
         """self.channel['$P9'] = {'N':'long', 'S':'name', 'B':word_len, ...}

@@ -24,6 +24,13 @@ def get_log_decade_min(f1, f2):
         return f2
 
 
+def fix_crossover(vals, max_val):
+    crossover_ix = np.where(vals[:-1] > vals[1:])[0]
+    for ix in crossover_ix:
+        vals = np.append(vals[:ix + 1], vals[ix + 1:] + max_val)
+    return vals
+
+
 # ------------------------------------------------------------------------------
 _spec_fields = (
     'name', 'long', 'word_len', 'bit_mask', 'max_range', 'log_max', 'log_min', 'gain')
@@ -54,20 +61,22 @@ def load_param_spec(type_i=True, **ch_spec):
 
 # ------------------------------------------------------------------------------
 class Parameters(object):
-    def __init__(self, datatype_i):
-        self._type_i = datatype_i
-        self._norm_count = True
+    def __init__(self, spec):
+        self.spec = spec
+        # self._norm_count = True
         self._config = None
         self.names = None
         self.par_ids = None
         self.ref_ids = []
         self._reference_channels = {}
+
         self.channel_ids = None
         self.bit_mask_ids = []
         self.log_ids = []
         self.linear_ids = []
         self.fl_comp_ids = []
         self.log_fl_comp_ids = []
+
         self._comp_matrix = None
 
         self.raw = None
@@ -76,13 +85,15 @@ class Parameters(object):
         self.xcxs = {}
         self.compensated = {}
         self.logscale_compensated = {}
+
         self.id_map = {}
 
-        self._timestep = 0
+        # self._timestep = 0
 
         self._ref_channels = {}
         self._time = None
         self._event_count = None
+        self._load_config()
 
     # --------------------------------------------------------------------------
     def __get_dataframe(self, src_group, add_ref=True):
@@ -122,38 +133,37 @@ class Parameters(object):
                 break
         return count_id
 
-    def __normalize_count(self, count_id):
+
+    def __normalize_count(self, event_count):
+        start_val = event_count.item(0)
+        diff = start_val - 1
+        if start_val < 0:
+            print('>>> event count warning:', start_val)
+
+        return event_count - diff
+
+
+    def __scale_count(self, count_id, norm):
         event_count = self.raw[count_id]
         event_spec = self._config.get(count_id)
         if event_spec.bit_mask:
             event_count = self.__bit_mask_data(count_id)
 
-        start_val = event_count.item(0)
-        if start_val < 0:
-            print('>>> event count warning:', start_val)
-            return event_count
-
-        if start_val != 1:
-            if start_val > 0:
-                diff = start_val - 1
-            elif start_val == 0:
-                diff = -1
-            event_count = event_count - diff
-
-        # check for count roll over
-        if np.any(event_count==0):
-            zero = np.where(event_count == 0)[0].item()
-            max_count = event_count[zero-1] + 1
-            event_count = np.append(event_count[:zero], event_count[zero:] + max_count)
+        if norm and event_count.item(0) != 1:
+            event_count = self.__normalize_count(event_count)
 
         return event_count
 
-    def __load_event_count(self):
+
+    def __load_ref_count(self, norm):
         count_id = self.__locate_count_param()
         if count_id:
-            event_count = self.__normalize_count(count_id)
+            event_count = self.__scale_count(count_id, norm)
         else:
             event_count = np.arange(1, len(self.raw[1]) + 1)
+
+        if np.any(event_count[:-1] > event_count[1:]):
+            event_count = fix_crossover(event_count, self.spec.max_val)
 
         self.__update_id_maps('Event Count', -1)
         self._reference_channels[-1] = event_count
@@ -182,17 +192,15 @@ class Parameters(object):
         return time_lsw, time_msw, time_id
 
 
-    def __encode_time(self, time_lsw, time_msw, timestep):
+    def __encode_time(self, time_lsw, time_msw):
         msw_word_len = self._config.get(time_msw).word_len
         msw_data = self.raw.get(time_msw)
         lsw_data = self.raw.get(time_lsw)
         double_word = ((msw_data << msw_word_len) | lsw_data)
-        delta = double_word - double_word[0]
-        enc_time = delta * timestep
-        return enc_time
+        return double_word
 
 
-    def __load_channel_time(self, timestep):
+    def __load_ref_time(self, norm):
         time_lsw, time_msw, time_id = self.__locate_time_params()
         if time_id and (time_lsw or time_msw) and not(time_lsw and time_msw):
             if time_lsw:
@@ -200,38 +208,44 @@ class Parameters(object):
             else:
                 time_lsw = time_id
             time_id = 0
+
         elif all((time_lsw, time_msw, time_id)):
             time_id = 0
         elif not any((time_lsw, time_msw, time_id)):
             return 0, 0, 0
 
         if time_id or (time_lsw and time_msw):
+            gain_factor = 1
+
             if time_lsw and time_msw:
-                time_channel = self.__encode_time(time_lsw, time_msw, timestep)
+                time_channel = self.__encode_time(time_lsw, time_msw)
             else:
-                time_channel = self.raw.get(time_id) * timestep
                 time_spec = self._config[time_id]
+                time_channel = self.raw.get(time_id)
                 if time_spec.gain:
-                    time_channel = time_channel / time_spec.gain
+                    gain_factor = time_spec.gain
+
+            # check for time roll over
+            if np.any(time_channel[:-1] > time_channel[1:]):
+                time_channel = fix_crossover(time_channel, self.spec.max_val)
+
+            time_channel = time_channel * self.spec.timestep / gain_factor
+            if norm and time_channel[0] != 0:
+                time_channel = time_channel - time_channel[0]
 
             self.__update_id_maps('TIME', 0)
             self._reference_channels[0] = time_channel
 
-        return time_lsw, time_msw, time_id
+        return [t_id for t_id in (time_lsw, time_msw, time_id) if t_id]
 
 
-    def __set_time_reference(self, timestep):
-        time_ids = self.__load_channel_time(timestep)
-        return [t for t in time_ids if t]
+    def load_reference_channels(self, norm_count, norm_time):
 
-    def load_reference_channels(self, timestep, norm_count):
-
-        if timestep:
-            time_ids = self.__set_time_reference(timestep)
+        if self.spec.timestep:
+            time_ids = self.__load_ref_time(norm_time)
             self.ref_ids.extend(time_ids)
 
-        # if norm_count:
-        count_id = self.__load_event_count()
+        count_id = self.__load_ref_count(norm_count)
         self.ref_ids.append(count_id)
 
         self.par_ids = tuple(id_ for id_ in self.par_ids if id_ not in self.ref_ids)
@@ -251,9 +265,11 @@ class Parameters(object):
         self.__norm_name_map = dict(zip(rdx_names, self.names))
 
 
-    def load_config(self, channel_spec):
+    def _load_config(self):
+        channel_spec = self.spec.channels
+
         self._config = {
-            num: load_param_spec(type_i=self._type_i, **channel_spec[num])
+            num: load_param_spec(type_i=self.spec.type_i, **channel_spec[num])
             for num in channel_spec}
 
         self.par_ids = tuple(sorted(channel_spec.keys()))
@@ -306,7 +322,7 @@ class Parameters(object):
         for param_n in bit_mask_ids:
             self.channel[param_n] = self.__bit_mask_data(param_n)
 
-        ch_to_include = [num for num in self.par_ids if num not in bit_mask_ids]
+        ch_to_include = set(self.par_ids) - set(bit_mask_ids)
         self.channel.update({param_n:self.raw[param_n] for param_n in ch_to_include})
 
 
@@ -338,7 +354,7 @@ class Parameters(object):
         return param_data / spec_.gain
 
     def set_scale_values(self):
-
+        # ---> $Param can have gain or log but not both
         self.log_ids = self.__get_ch_attr('log_max', dropzero=True)
         gain_mask = [(n != 0 and n != 1) for n in self.__get_ch_attr('gain')]
         self.gain_ids = tuple(compress(self.par_ids, gain_mask))
@@ -347,7 +363,6 @@ class Parameters(object):
             log_data = self.__log_scale(param_n, self.channel)
             self.scale[param_n] = log_data
 
-        # ---> $Param can have gain or log but not both
         if self.gain_ids:
             for param_n in self.gain_ids:
                 gain_data = self.__gain_scale(param_n, self.channel)
@@ -355,7 +370,7 @@ class Parameters(object):
 
 
     # --------------------------------------------------------------------------
-    def load_spillover(self, fl_comp_matrix, fl_comp_ids):
+    def set_spillover(self, fl_comp_matrix, fl_comp_ids):
         self._comp_matrix, self.fl_comp_ids = fl_comp_matrix, fl_comp_ids
 
 

@@ -2,29 +2,31 @@
 
 """
     FCS file reader supporting file format spec 3.0, 3.1.
-    Data extraction currently supports LIST MODE only.
+    Data extraction currently supports:
+        $MODE: (L) List
+        $DATATYPE: I,F,D
 
     FCS3.0 http://murphylab.web.cmu.edu/FCSAPI/FCS3.html
     FCS3.1 https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2892967/
-    A data set is a (HEADER, TEXT, DATA) group. Multiple data sets in one file is deprecated.
+    A data set is a (HEADER, TEXT, DATA) group.
+    Multiple data sets in one file is deprecated.
 
     2.2.5
     A keyword is the label of a data field. A keyword-value pair is the label of the
-    data field with its associated value. Keywords are unique in data sets, i.e.,
-    there are no multiple instances of the same keyword in the data set.
+    data field with its associated value. Keywords are unique in data sets,
+    i.e., there are no multiple instances of the same keyword in the data set.
 
     Required FCS primary TEXT segment keywords:
-    $BEGINANALYSIS $BEGINDATA $BEGINSTEXT $BYTEORD $DATATYPE $ENDANALYSIS $ENDDATA
-    $ENDSTEXT $MODE $NEXTDATA $PAR $PnB $PnE $PnN $PnR $TOT
+    $BEGINANALYSIS $BEGINDATA $BEGINSTEXT $BYTEORD $DATATYPE $ENDANALYSIS
+    $ENDDATA $ENDSTEXT $MODE $NEXTDATA $PAR $TOT $PnB $PnE $PnN $PnR
 """
 
 from itertools import chain, compress
-import re
 import struct
-# import sys
 
 from XFCS.FCSFile.DataSection import DataSection
 from XFCS.FCSFile.Metadata import Metadata
+from XFCS.FCSFile import validate
 # ------------------------------------------------------------------------------
 def filter_numeric(s):
     """If the given string is numeric, return a numeric value for it"""
@@ -98,6 +100,8 @@ class FCSFile(object):
         self.version = None
         self.name = ''
         self.filepath = ''
+        self.valid = False
+        self.supported_format = False
         self.datatype = ''
         self._fcs = None
         self.__header = None
@@ -106,7 +110,6 @@ class FCSFile(object):
         self.__key_set = {}
         self.__n_keys = 0
         self.spec = None
-        self.metadata = None
         self.__raw_data = None
         self.data = None
         self.__supp_text = None
@@ -128,8 +131,7 @@ class FCSFile(object):
         self.name = fcs_obj.name
         self.filepath = fcs_file
 
-        version_id = fcs_obj.read(6).decode("utf-8")
-        print('\n---> fcs.load({}) - vid:{}'.format(self.name, version_id))
+        version_id = fcs_obj.read(6).decode('utf-8')
 
         if version_id in ('FCS3.0', 'FCS3.1'):
             self.version = version_id
@@ -138,13 +140,15 @@ class FCSFile(object):
             raise NotImplementedError('Not able to parse {vid} files'.format(vid=version_id))
 
         self._fcs = fcs_obj
+        vtxt = 'valid' if self.valid else 'invalid'
+        print('---> fcs.load({}) - ver: {} - {}'.format(self.name, version_id[3:], vtxt))
 
 
     def __load_30(self, fcs_obj):
         """Load an FCS 3.0 file and read text section (metadata).
 
-        Arg:
-            f: A file descriptor
+            Arg:
+                f: A file descriptor
         """
 
         fcs_obj.seek(10)
@@ -174,81 +178,36 @@ class FCSFile(object):
             self.param_keys = tuple(all_keys)
 
         self.__update_key_set()
-        self._load_metadata()
+
+        self.load_spec()
 
 
-    def _confirm_required_keywords(self):
-        keywords = [
-            '$BEGINANALYSIS', '$BEGINDATA', '$BEGINSTEXT', '$BYTEORD',
-            '$DATATYPE', '$ENDANALYSIS', '$ENDDATA', '$ENDSTEXT', '$MODE',
-            '$NEXTDATA', '$PAR', '$TOT']
+    def load_spec(self):
+        self.valid = validate.required_keywords(self.text)
 
-        spx = re.compile(r'^\$P\d+[BENR]$')
-        all_spx = [kw for kw in self.param_keys if spx.match(kw)]
-        keywords.extend(all_spx)
-        required_keywords = tuple(kw in self.__key_set for kw in keywords)
-        required_params = len(all_spx) == self.text['$PAR'] * 4
+        _metadata = Metadata(self.version, self.text)
+        self.spec = _metadata.spec
 
-        if not all(required_keywords):
-            missing_keywords = tuple(compress(keywords, required_keywords))
-            print('--> missing keywords:', missing_keywords)
-            status = False
-        elif not required_params:
-            print('--> missing $PnX keywords')
-            status = False
-        else:
-            status = True
-        return status
+        self.supported_format = validate.file_format(self.text, self.spec)
 
-    def _verify_mode_type(self):
-        list_mode = self.text['$MODE'] == 'L'
-        supported_datatype = self.datatype in ('I', 'F', 'D')
-        return list_mode, supported_datatype
-
-    def _load_metadata(self):
-
-        self.datatype = self.text['$DATATYPE'].upper()
-
-        req_kws = self._confirm_required_keywords()
-        list_mode, supported_datatype = self._verify_mode_type()
-        one_data_set = self.text.get('$NEXTDATA') == 0
-
-        checks = (req_kws, list_mode, supported_datatype, one_data_set)
-        check_txt = ('req_kws', 'list_mode', 'supported_datatype', 'one_data_set')
-
-        if not all(checks):
-            print('---> FCS file format is invalid')
-            for check, txt in zip(checks, check_txt):
-                if not check:
-                    print('>>>', txt)
-        else:
-            print('---> FCS file format is valid')
-
-        self.metadata = Metadata(self.version, self.text)
-        self.spec = self.metadata.spec
 
 
     # --------------------------------------------------------------------------
-    def load_data(self, norm_count=False):
-        if not self.__header:
+    def load_data(self, norm_count=False, norm_time=False):
+        if not (self.__header or self._fcs):
             print('>>> No FCS file loaded.')
             return
-        # elif not self.metadata.has_valid_format:
-        #     # TODO: raise Error instead
-        #     print('>>> ABORTING DATA EXTRACTION')
-        #     return
+        elif not self.supported_format:
+            print('>>> XFCS cannot access the data section in this file.')
+            return
 
-        if self.datatype == 'I':
+        if self.spec.datatype == 'I':
             self.__read_int_data()
-            type_i = True
         else:
             self.__read_float_data()
-            type_i = False
 
         self._fcs.close()
-        self.data = DataSection(self.__raw_data, self.spec, type_i, norm_count)
-
-        print('---> fcs.load_data: complete')
+        self.data = DataSection(self.__raw_data, self.spec, norm_count, norm_time)
 
 
     def __read_float_data(self):
@@ -260,10 +219,9 @@ class FCSFile(object):
         self._fcs.seek(data_start)
         data_bytes = self._fcs.read(read_len)
 
-        fmt_type = self.datatype.lower()
-        flt_fmt = '{}{}'.format(self.spec.byteord, fmt_type)
-        fl_read = struct.Struct(flt_fmt)
-        self.__raw_data = tuple(chain.from_iterable(fl_read.iter_unpack(data_bytes)))
+        float_format = '{}{}'.format(self.spec.byteord, self.spec.datatype.lower())
+        bytes_to_float = struct.Struct(float_format)
+        self.__raw_data = tuple(chain.from_iterable(bytes_to_float.iter_unpack(data_bytes)))
 
 
     def __read_int_data(self):
@@ -285,10 +243,6 @@ class FCSFile(object):
         data_start = self.__header['data_start']
         data_end = self.__header['data_end']
 
-        # header_check_1 = (data_start == self.metadata.spec.begindata)
-        # header_check_2 = (data_end == self.metadata.spec.enddata)
-        #
-        # if not all((header_check_1, header_check_2)):
         if not (data_start and data_end):
             data_start = self.spec.begindata
             data_end = self.spec.enddata
@@ -382,8 +336,3 @@ class FCSFile(object):
 
 
 # ------------------------------------------------------------------------------
-# if __name__ == "__main__":
-#
-#     x = FCSFile()
-#     x.load(open(sys.argv[1], 'rb'))
-#     print(x.text)
