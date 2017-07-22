@@ -3,7 +3,7 @@ from itertools import islice
 
 import numpy as np
 
-from XFCS.FCSFile.ParameterData import ParameterData
+from xfcs.FCSFile.ParameterData import ParameterData
 # ------------------------------------------------------------------------------
 class DataSection(object):
     def __init__(self, raw_data, spec, norm_count, norm_time):

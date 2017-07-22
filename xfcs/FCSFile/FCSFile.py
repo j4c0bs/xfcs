@@ -25,9 +25,9 @@
 from itertools import chain
 import struct
 
-from XFCS.FCSFile.DataSection import DataSection
-from XFCS.FCSFile.Metadata import Metadata
-from XFCS.FCSFile import validate
+from xfcs.FCSFile.DataSection import DataSection
+from xfcs.FCSFile.Metadata import Metadata
+from xfcs.FCSFile import validate
 # ------------------------------------------------------------------------------
 def filter_numeric(s):
     """If the given string is numeric, return a numeric value for it"""
@@ -62,24 +62,23 @@ class FCSFile(object):
         text: dict containing all Parameter metadata key : value
         param_keys: iterable of Parameter keys in order of location in fcs text section
 
-        data_hex_bytes: Complete Data Section read as hex
-        metadata
         data ->
-        datasection
 
     Public Methods:
         load: Load an FCS file for reading and confirm version id is supported.
-        load_from_csv: Init FCSFile object from csv containing Parameter key, value pairs.
         load_data: Load Data Section for reading
-        write_data: Writes data section to csv or hdf5 file.
+        load_from_csv: Init FCSFile object from csv containing Parameter key, value pairs.
 
-        check_file_standards_conformity: Confirms metadata format.
-        meta_hash: Generates unique fingerprint based on Parameter key, value pairs.
+        check_file_format: Confirms metadata format.
+        load_file_spec: Loads all header, text contents into namedtuple.
+            Confirms if file is supported for data extraction.
 
         has_param: Confirm Parameter key in text section.
         param: Retrieve value for given Parameter key.
         numeric_param: Force retrieve numeric value for given Parameter key or 0.
-        set_param: Sets value for given Parameter key within self.text.
+        set_param: Sets value for given Parameter key within fcs.text.
+        meta_hash: Generates unique fingerprint based on current Parameter key, value pairs.
+            NOTE: this does not provide a hash value for the actual file.
 
     """
 
@@ -88,13 +87,14 @@ class FCSFile(object):
 
         Attributes:
             version: version ID for FCS file.
-            text: dict of text section metadata Parameter key, value pairs
-            param_keys: iterable of Parameter keys in order of location in fcs text section
-
-            data_hex_bytes: Complete Data Section read as hex
-            metadata
-            data
-            datasection
+            name: filename of fcs file.
+            filepath: filepath of fcs file.
+            text: dict of text section metadata Parameter key, value pairs.
+            param_keys: iterable of Parameter keys in order of location in fcs
+                text section.
+            spec: namedtuple instance containing all necessary header, text values
+                to extract and scale parameter data.
+            data: Data class instance to access extracted data sets.
 
         """
 
@@ -103,7 +103,6 @@ class FCSFile(object):
         self.filepath = ''
         self.valid = False
         self.supported_format = False
-        self.datatype = ''
         self._fcs = None
         self.__header = None
         self.text = {}
@@ -146,8 +145,8 @@ class FCSFile(object):
     def __load_30(self, fcs_obj):
         """Load an FCS 3.0 file and read text section (metadata).
 
-            Arg:
-                f: A file descriptor
+        Arg:
+            fcs_obj: A file descriptor
         """
 
         fcs_obj.seek(10)
@@ -196,6 +195,13 @@ class FCSFile(object):
 
     # --------------------------------------------------------------------------
     def load_data(self, norm_count=False, norm_time=False):
+        """Public access point to load and read the data section.
+
+        Args:
+            norm_count: bool - force event count to start at 1.
+            norm_time: bool - force time to start at 0.
+        """
+
         if not self.spec:
             self.load_file_spec()
 
@@ -213,6 +219,8 @@ class FCSFile(object):
 
 
     def __read_float_data(self):
+        """Reads fcs $DATATYPE (F|D) - floats (32|64) bit word length"""
+
         data_start, data_end = self.__get_data_seek()
         read_len = data_end - data_start
         if read_len + 1 == self.spec.data_len:
@@ -227,6 +235,7 @@ class FCSFile(object):
 
 
     def __read_int_data(self):
+        """Reads fcs $DATATYPE I - integer data with fixed word length"""
 
         data_start, data_end = self.__get_data_seek()
         self._fcs.seek(data_start)
@@ -242,6 +251,7 @@ class FCSFile(object):
 
 
     def __get_data_seek(self):
+        """Finds data start and end values within either the header or text section"""
         data_start = self.__header['data_start']
         data_end = self.__header['data_end']
 

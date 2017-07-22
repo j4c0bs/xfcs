@@ -5,10 +5,10 @@ import os
 import sys
 import time
 
-from XFCS.FCSFile.FCSFile import FCSFile
-from XFCS.get_metadata import write_obj_metadata
-from XFCS.utils.locator import locate_fcs_files
-from XFCS.version import VERSION
+from xfcs.FCSFile.FCSFile import FCSFile
+from xfcs.get_metadata import write_obj_metadata
+from xfcs.utils.locator import locate_fcs_files
+from xfcs.version import VERSION
 # ------------------------------------------------------------------------------
 
 def parse_arguments():

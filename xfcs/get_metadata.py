@@ -8,11 +8,11 @@ import os
 import sys
 import time
 
-from XFCS.FCSFile.FCSFile import FCSFile
-from XFCS.utils import metadata_csv, metadata_time
-from XFCS.utils.locator import locate_fcs_files
-from XFCS.utils.metadata_stats import add_param_mean
-from XFCS.version import VERSION
+from xfcs.FCSFile.FCSFile import FCSFile
+from xfcs.utils import metadata_csv, metadata_time
+from xfcs.utils.locator import locate_fcs_files
+from xfcs.utils.metadata_stats import add_param_mean
+from xfcs.version import VERSION
 
 # ------------------------------------------------------------------------------
 FORCED_SRC_KEYS = ('CSV_CREATED', 'SRC_DIR', 'SRC_FILE')
