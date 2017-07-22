@@ -60,7 +60,7 @@ def load_param_spec(type_i=True, **ch_spec):
 #     return np.log(X + np.sqrt(np.exp2(X) + 1))
 
 # ------------------------------------------------------------------------------
-class Parameters(object):
+class ParameterData(object):
     def __init__(self, spec):
         self.spec = spec
         self._config = None
@@ -121,7 +121,7 @@ class Parameters(object):
 
 
     def __get_ch_attr(self, attr, dropzero=False):
-        """Utility func to retrieve a specific attribute for all parameters and
+        """Utility func to retrieve a specific attribute for all ParameterData and
             return either attribute values or the corresponding parameter ids.
 
         Args:
@@ -331,19 +331,22 @@ class Parameters(object):
 
 
     # --------------------------------------------------------------------------
-    def set_group_ids(self):
+    def _set_group_ids(self):
         self.channel_ids = self.par_ids[:]
         self.bit_mask_ids = self.__get_ch_attr('bit_mask', dropzero=True)
+
         # set scale ids for log and gain
         self.log_ids = self.__get_ch_attr('log_max', dropzero=True)
         gain_mask = [(n != 0 and n != 1) for n in self.__get_ch_attr('gain')]
         self.gain_ids = tuple(compress(self.par_ids, gain_mask))
+
         # set channel_scale ids
         self.linear_ids = tuple(set(self.channel_ids) - set(self.log_ids))
 
 
     def set_channel_values(self):
-        self.set_group_ids()
+        self._set_group_ids()
+
         for param_n in self.bit_mask_ids:
             self.channel[param_n] = self.__bit_mask_data(param_n)
 
