@@ -1,3 +1,8 @@
+"""
+All functions related to:
+    - validating fcs header and text section conforms to file format specifications
+    - confirming input fcs file is supported for data extraction
+"""
 
 from itertools import compress
 import warnings

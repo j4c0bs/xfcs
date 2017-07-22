@@ -63,22 +63,21 @@ def load_param_spec(type_i=True, **ch_spec):
 class Parameters(object):
     def __init__(self, spec):
         self.spec = spec
-        # self._norm_count = True
         self._config = None
         self.names = None
         self.par_ids = None
         self.ref_ids = []
-        self._reference_channels = {}
-
-        self.channel_ids = None
-        self.bit_mask_ids = []
-        self.log_ids = []
-        self.linear_ids = []
-        self.fl_comp_ids = []
-        self.log_fl_comp_ids = []
-
+        self.id_map = {}
         self._comp_matrix = None
 
+        self.channel_ids = None
+        self.bit_mask_ids = None
+        self.log_ids = None
+        self.linear_ids = None
+        self.flcomp_ids = None
+        self.log_flcomp_ids = None
+
+        self._reference_channels = {}
         self.raw = None
         self.channel = {}
         self.scale = {}
@@ -86,19 +85,26 @@ class Parameters(object):
         self.compensated = {}
         self.logscale_compensated = {}
 
-        self.id_map = {}
-
-        # self._timestep = 0
-
-        self._ref_channels = {}
-        self._time = None
-        self._event_count = None
         self._load_config()
+
+    def __dir__(self):
+        return self.keys()
 
     # --------------------------------------------------------------------------
     def __get_dataframe(self, src_group, add_ref=True):
+        """Converts data values dict to pandas DataFrame.
+
+        Args:
+            src_group: dict of data values mapped to parameter id number
+            add_ref: bool to enable including time and count values in output
+
+        Returns:
+            tuple containing: parameter names list, DataFrame
+            or (empty list, None) if values are unavailable
+        """
+
         if not src_group:
-            return None
+            return ([], None)
 
         tmp_group = {}
         tmp_group.update(src_group)
@@ -107,14 +113,26 @@ class Parameters(object):
             tmp_group.update(self._reference_channels)
 
         tmp_ids = sorted(tmp_group.keys())
-        tmp_names = [self.id_map[id_] for id_ in tmp_ids]
-        tmp_data = {name: tmp_group[id_] for name, id_ in zip(tmp_names, tmp_ids)}
+        par_names = [self.id_map[id_] for id_ in tmp_ids]
+        tmp_data = {name: tmp_group[id_] for name, id_ in zip(par_names, tmp_ids)}
 
-        xs_df = pd.DataFrame(tmp_data, columns=tmp_names)
-        return xs_df
+        xs_df = pd.DataFrame(tmp_data, columns=par_names)
+        return (par_names, xs_df)
 
 
     def __get_ch_attr(self, attr, dropzero=False):
+        """Utility func to retrieve a specific attribute for all parameters and
+            return either attribute values or the corresponding parameter ids.
+
+        Args:
+            attr: the attribute to retrieve
+            dropzero: filters list of parameter ids to include if specified
+                        attribute exists.
+
+        Return:
+            tuple of attribute values or parameter id numbers
+        """
+
         vals = tuple(getattr(self._config.get(num), attr) for num in self.par_ids)
         if dropzero:
             vals = tuple(compress(self.par_ids, vals))
@@ -240,16 +258,13 @@ class Parameters(object):
 
 
     def load_reference_channels(self, norm_count, norm_time):
-
-        if self.spec.timestep:
-            time_ids = self.__load_ref_time(norm_time)
+        time_ids = self.__load_ref_time(norm_time)
+        if time_ids:
             self.ref_ids.extend(time_ids)
 
         count_id = self.__load_ref_count(norm_count)
         self.ref_ids.append(count_id)
-
         self.par_ids = tuple(id_ for id_ in self.par_ids if id_ not in self.ref_ids)
-        self.channel_ids = self.par_ids[:]
 
     # --------------------------------------------------------------------------
     def __load_id_maps(self):
@@ -295,12 +310,12 @@ class Parameters(object):
         return self.__get_dataframe(self.xcxs)
 
     def get_compensated(self):
-        if not self.compensated:
+        if self._has_compensation() and not self.compensated:
             self.set_compensated_values()
         return self.__get_dataframe(self.compensated)
 
     def get_scale_compensated(self):
-        if not self.logscale_compensated:
+        if self._has_compensation(xch='Scaled ') and not self.logscale_compensated:
             self.set_logscale_compensated()
         return self.__get_dataframe(self.logscale_compensated)
 
@@ -316,13 +331,23 @@ class Parameters(object):
 
 
     # --------------------------------------------------------------------------
-    def set_channel_values(self):
+    def set_group_ids(self):
+        self.channel_ids = self.par_ids[:]
+        self.bit_mask_ids = self.__get_ch_attr('bit_mask', dropzero=True)
+        # set scale ids for log and gain
+        self.log_ids = self.__get_ch_attr('log_max', dropzero=True)
+        gain_mask = [(n != 0 and n != 1) for n in self.__get_ch_attr('gain')]
+        self.gain_ids = tuple(compress(self.par_ids, gain_mask))
+        # set channel_scale ids
+        self.linear_ids = tuple(set(self.channel_ids) - set(self.log_ids))
 
-        bit_mask_ids = self.__get_ch_attr('bit_mask', dropzero=True)
-        for param_n in bit_mask_ids:
+
+    def set_channel_values(self):
+        self.set_group_ids()
+        for param_n in self.bit_mask_ids:
             self.channel[param_n] = self.__bit_mask_data(param_n)
 
-        ch_to_include = set(self.par_ids) - set(bit_mask_ids)
+        ch_to_include = set(self.par_ids) - set(self.bit_mask_ids)
         self.channel.update({param_n:self.raw[param_n] for param_n in ch_to_include})
 
 
@@ -332,8 +357,6 @@ class Parameters(object):
 
         if not self.scale:
             self.set_scale_values()
-
-        self.linear_ids = tuple(id_ for id_ in self.channel.keys() if id_ not in self.log_ids)
 
         linlog_sets = (self.channel, self.scale)
         linlog_ids = (self.linear_ids, self.log_ids)
@@ -347,17 +370,15 @@ class Parameters(object):
         param_data = src_group.get(param_n)
         return 10**(spec_.log_max * param_data / spec_.max_range) * spec_.log_min
 
+
     def __gain_scale(self, param_n, src_group):
         spec_ = self._config.get(param_n)
-        print('--> __gain_scale({}), gain={}'.format(param_n, spec_.gain))
         param_data = src_group.get(param_n)
         return param_data / spec_.gain
 
+
     def set_scale_values(self):
         # ---> $Param can have gain or log but not both
-        self.log_ids = self.__get_ch_attr('log_max', dropzero=True)
-        gain_mask = [(n != 0 and n != 1) for n in self.__get_ch_attr('gain')]
-        self.gain_ids = tuple(compress(self.par_ids, gain_mask))
 
         for param_n in self.log_ids:
             log_data = self.__log_scale(param_n, self.channel)
@@ -370,26 +391,42 @@ class Parameters(object):
 
 
     # --------------------------------------------------------------------------
-    def set_spillover(self, fl_comp_matrix, fl_comp_ids):
-        self._comp_matrix, self.fl_comp_ids = fl_comp_matrix, fl_comp_ids
+    def _has_compensation(self, xch=''):
+        if not self.spec.spillover:
+            print('>>> $SPILLOVER value not found in FCS text section')
+            print('>>> {}fluorescence compensation values are unavailable'.format(xch))
+            return False
+        else:
+            return True
+
+    def set_compensation_matrix(self, comp_matrix_map, fl_comp_ids):
+        self._comp_matrix = comp_matrix_map
+        self.flcomp_ids = fl_comp_ids
+        self.log_flcomp_ids = tuple(set(self.log_ids) & set(self.flcomp_ids))
 
 
     def set_compensated_values(self):
-        for ix, param_n in enumerate(self.fl_comp_ids):
+        for param_n in self.flcomp_ids:
             param_data = self.channel.get(param_n)
-            comp_factor = self._comp_matrix[:,ix].sum()
+            comp_factor = self._comp_matrix[param_n]
             self.compensated[param_n] = param_data * comp_factor
 
+    # def set_compensated_values(self):
+    #     for ix, param_n in enumerate(self.flcomp_ids):
+    #         param_data = self.channel.get(param_n)
+    #         comp_factor = self._comp_matrix[:,ix].sum()
+    #         self.compensated[param_n] = param_data * comp_factor
+    #
+
     def set_logscale_compensated(self):
-        log_fl_comp_ids = tuple(set(self.log_ids) & set(self.fl_comp_ids))
-        if not log_fl_comp_ids:
+        if not self.log_flcomp_ids:
             print('>>> No compensated params have log scaling.')
             return
 
         if not self.compensated:
             self.set_compensated_values()
 
-        for param_n in log_fl_comp_ids:
+        for param_n in self.log_flcomp_ids:
             log_ = self.__log_scale(param_n, self.compensated)
             self.logscale_compensated[param_n] = log_
 

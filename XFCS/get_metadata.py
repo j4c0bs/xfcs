@@ -140,7 +140,6 @@ def load_metadata(paths):
         fcs.set_param('SRC_DIR', src_dir)
         fcs.set_param('SRC_FILE', src_file)
 
-        # TODO: make key check more efficient
         meta_keys.extend((mk for mk in fcs.param_keys if mk not in meta_keys))
         fcs_objs.append(fcs)
 
@@ -194,7 +193,6 @@ def write_obj_metadata(fcs):
     fcs.set_param('SRC_DIR', fcs_dir)
     fcs.set_param('SRC_FILE', fcs_name)
     metadata_csv.write_file((fcs,), meta_keys, csv_fn, tidy=False)
-    print('--> metadata generated for:', fcs_name)
 
 
 def batch_separate_metadata(fcs_objs, meta_keys, tidy):
@@ -212,7 +210,7 @@ def batch_separate_metadata(fcs_objs, meta_keys, tidy):
     csv_paths = []
     for fcs in fcs_objs:
         sep_keys = tuple(key for key in meta_keys if fcs.has_param(key))
-        csv_fn = fcs_to_csv_path(fcs.name,  tidy=tidy)
+        csv_fn = fcs_to_csv_path(fcs.name, tidy=tidy)
         # csv_fn = fcs_to_csv_path(fcs.param('SRC_FILE'), fcs.param('SRC_DIR'), tidy=tidy)
         # csv_fn = fcs_to_csv_path(fcs.param('SRC_FILE'), tidy=tidy)
         metadata_csv.write_file((fcs,), sep_keys, csv_fn, tidy)
@@ -282,7 +280,7 @@ def append_metadata(fcs_objs, meta_keys, master_csv, fn_out):
 
     csv_fcs_objs = batch_load_fcs_from_csv(merge_keys, merge_data)
 
-    # >>> check duplicate fcs metadata entries
+    # check duplicate fcs metadata entries
     comparison_keys = [key for key in merge_keys if key in meta_keys]
 
     csv_fcs_hashes = set(fcs.meta_hash(comparison_keys) for fcs in csv_fcs_objs)

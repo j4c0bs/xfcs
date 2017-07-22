@@ -5,6 +5,13 @@ import os
 # ------------------------------------------------------------------------------
 def locate_fcs_files(recursive=False):
     """Returns sorted from oldest -> most recent if name format uses date.
+
+    Arg:
+        recursive: enable recursive directory search
+
+    Returns:
+        sorted list of fcs filepaths
+
     """
 
     glob_loc = '[!.]*.fcs'

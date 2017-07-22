@@ -7,7 +7,7 @@ $ENDSTEXT $MODE $NEXTDATA $PAR $TOT $PnB $PnE $PnN $PnR
 """
 
 from collections import namedtuple
-from itertools import compress
+# from itertools import compress
 
 import numpy as np
 # ------------------------------------------------------------------------------
@@ -129,7 +129,7 @@ class Metadata(object):
             self._add_to_spec(keyword)
 
     def _set_optional_keywords(self):
-        self._add_to_spec('$TIMESTEP', def_val=0)
+        self._add_to_spec('$TIMESTEP', def_val=1)
         if self.version != 'FCS3.0' or '$SPILLOVER' in self._text:
             self._add_to_spec('$SPILLOVER')
         else:

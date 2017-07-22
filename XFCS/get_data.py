@@ -99,21 +99,26 @@ def batch_export_data(fcs_paths, data_choices, metadata, norm_count, norm_time, 
         if getattr(data_choices, user_option):
             user_select.append((user_option, data_attr))
 
-
     for path in fcs_paths:
         fcs = FCSFile()
         fcs.load(path)
         fcs.load_data(norm_count, norm_time)
+        write_count = 0
 
         for user_option, data_attr in user_select:
-            data_set = getattr(fcs.data, data_attr)
-            if data_set is not None:
+            data_pkg = getattr(fcs.data, data_attr)
+            data_names, data_set = data_pkg
+            if data_pkg and data_names:
                 store_data(data_set, user_option, path)
+                write_count += 1
             else:
                 print('>>> fcs data set <{}> is unavailable.'.format(user_option))
 
+        print('---> Data sets extracted to file:', write_count)
+
         if metadata:
             write_obj_metadata(fcs)
+            print('---> metadata generated for:', fcs.name)
 
 # ------------------------------------------------------------------------------
 def main():

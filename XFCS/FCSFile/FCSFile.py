@@ -11,17 +11,18 @@
     A data set is a (HEADER, TEXT, DATA) group.
     Multiple data sets in one file is deprecated.
 
-    2.2.5
     A keyword is the label of a data field. A keyword-value pair is the label of the
     data field with its associated value. Keywords are unique in data sets,
     i.e., there are no multiple instances of the same keyword in the data set.
+
+    --> keywords == params and are contained with FCSFile.text
 
     Required FCS primary TEXT segment keywords:
     $BEGINANALYSIS $BEGINDATA $BEGINSTEXT $BYTEORD $DATATYPE $ENDANALYSIS
     $ENDDATA $ENDSTEXT $MODE $NEXTDATA $PAR $TOT $PnB $PnE $PnN $PnR
 """
 
-from itertools import chain, compress
+from itertools import chain
 import struct
 
 from XFCS.FCSFile.DataSection import DataSection
@@ -140,8 +141,6 @@ class FCSFile(object):
             raise NotImplementedError('Not able to parse {vid} files'.format(vid=version_id))
 
         self._fcs = fcs_obj
-        vtxt = 'valid' if self.valid else 'invalid'
-        print('---> fcs.load({}) - ver: {} - {}'.format(self.name, version_id[3:], vtxt))
 
 
     def __load_30(self, fcs_obj):
@@ -178,27 +177,30 @@ class FCSFile(object):
             self.param_keys = tuple(all_keys)
 
         self.__update_key_set()
+        self.check_file_format()
 
-        self.load_spec()
 
-
-    def load_spec(self):
+    def check_file_format(self):
         self.valid = validate.required_keywords(self.text)
+        vtxt = 'valid' if self.valid else 'invalid'
+        print('\n---> fcs file loaded:', self.name)
+        print('---> ver: {}, headers: {}'.format(self.version[3:], vtxt))
 
+
+    def load_file_spec(self):
         _metadata = Metadata(self.version, self.text)
         self.spec = _metadata.spec
-
         self.supported_format = validate.file_format(self.text, self.spec)
 
 
 
     # --------------------------------------------------------------------------
     def load_data(self, norm_count=False, norm_time=False):
+        if not self.spec:
+            self.load_file_spec()
+
         if not (self.__header or self._fcs):
             print('>>> No FCS file loaded.')
-            return
-        elif not self.supported_format:
-            print('>>> XFCS cannot access the data section in this file.')
             return
 
         if self.spec.datatype == 'I':

@@ -8,7 +8,6 @@ from XFCS.FCSFile.Parameter import Parameters
 class DataSection(object):
     def __init__(self, raw_data, spec, norm_count, norm_time):
         self.spec = spec
-        self._comp_ids = []
         self._comp_matrix = None
         self.__raw = None
         self.__channel = None
@@ -16,9 +15,11 @@ class DataSection(object):
         self.__scale = None
         self.__compensated = None
         self.__scale_compensated = None
-        self.parameters = Parameters(spec)
+        self._parameters = Parameters(spec)
         self._load_parameter_channels(raw_data, norm_count, norm_time)
 
+    def __dir__(self):
+        return self.keys()
 
     def _load_parameter_channels(self, raw_data, norm_count, norm_time):
         par = self.spec.par
@@ -31,47 +32,38 @@ class DataSection(object):
             raw_values.append(raw_ch)
 
         # set_ reference and channel values, load spillover matrix
-        self.parameters.set_raw_values(raw_values)
-        self.parameters.load_reference_channels(norm_count, norm_time)
-        self.parameters.set_channel_values()
+        self._parameters.set_raw_values(raw_values)
+        self._parameters.load_reference_channels(norm_count, norm_time)
+        self._parameters.set_channel_values()
         if self.spec.spillover:
-            self.__load_spillover_matrix()
-            self.parameters.set_spillover(self._comp_matrix, self._comp_ids)
-        print('---> All data read and channels loaded.')
+            comp_matrix_map, comp_ids = self.__load_spillover_matrix()
+            self._parameters.set_compensation_matrix(comp_matrix_map, comp_ids)
 
 
     # --------------------------------------------------------------------------
     @property
     def raw(self):
-        return self.parameters.get_raw()
+        return self._parameters.get_raw()
 
     @property
     def channel(self):
-        return self.parameters.get_channel()
+        return self._parameters.get_channel()
 
     @property
     def scale(self):
-        return self.parameters.get_scale()
+        return self._parameters.get_scale()
 
     @property
     def channel_scale(self):
-        return self.parameters.get_xcxs()
+        return self._parameters.get_xcxs()
 
     @property
     def compensated(self):
-        if self.spec.spillover:
-            return self.parameters.get_compensated()
-        else:
-            print('>>> No $SPILLOVER data found within FCS Text Section.')
-            return None
+        return self._parameters.get_compensated()
 
     @property
     def scale_compensated(self):
-        if self.spec.spillover:
-            return self.parameters.get_scale_compensated()
-        else:
-            print('>>> No $SPILLOVER data found within FCS Text Section.')
-            return None
+        return self._parameters.get_scale_compensated()
 
     # --------------------------------------------------------------------------
 
@@ -82,9 +74,9 @@ class DataSection(object):
 
         param_ids = [n for n in spillover[1:n_channels + 1]]
         if all(id_.isdigit() for id_ in param_ids):
-            self._comp_ids = tuple(int(n) for n in param_ids)
+            comp_ids = tuple(int(n) for n in param_ids)
         else:
-            self._comp_ids = tuple(self.parameters.id_map[p_id] for p_id in param_ids)
+            comp_ids = tuple(self._parameters.id_map[p_id] for p_id in param_ids)
 
         comp_vals = [float(n) for n in spillover[n_channels + 1:]]
         spill_matrix = np.array(comp_vals).reshape(n_channels, n_channels)
@@ -101,6 +93,13 @@ class DataSection(object):
         if diagonals.item(0) != 1:
             spill_matrix = spill_matrix / diagonals.item(0)
         self._comp_matrix = np.linalg.inv(spill_matrix)
+
+        comp_matrix_map = {}
+        for ix, param_n in enumerate(comp_ids):
+            comp_factor = self._comp_matrix[:,ix].sum()
+            comp_matrix_map[param_n] = comp_factor
+
+        return comp_matrix_map, comp_ids
 
 
     # --------------------------------------------------------------------------

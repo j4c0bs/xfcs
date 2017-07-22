@@ -1,3 +1,6 @@
+"""
+Custom FCS file exceptions
+"""
 
 class FCSError(Exception):
     """Base class for all fcs exceptions"""
