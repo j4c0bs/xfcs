@@ -322,6 +322,7 @@ class ParameterData(object):
     def set_raw_values(self, raw_channels):
         self.raw = dict(zip(self.par_ids, raw_channels))
 
+
     def __bit_mask_data(self, param_n):
         data = self.raw.get(param_n)
         spec_n = self._config.get(param_n)
@@ -339,7 +340,7 @@ class ParameterData(object):
         gain_mask = [(n != 0 and n != 1) for n in self.__get_ch_attr('gain')]
         self.gain_ids = tuple(compress(self.par_ids, gain_mask))
 
-        # set channel_scale ids
+        # set channel_scale / xcxs ids
         self.linear_ids = tuple(set(self.channel_ids) - set(self.log_ids))
 
 
@@ -395,8 +396,7 @@ class ParameterData(object):
     # --------------------------------------------------------------------------
     def _has_compensation(self, xch=''):
         if not self.spec.spillover:
-            print('>>> $SPILLOVER value not found in FCS text section')
-            print('>>> {}fluorescence compensation values are unavailable'.format(xch))
+            print('>>> {}Fluorescence compensation is disabled - $SPILLOVER missing.'.format(xch))
             return False
         else:
             return True
@@ -413,16 +413,10 @@ class ParameterData(object):
             comp_factor = self._comp_matrix[param_n]
             self.compensated[param_n] = param_data * comp_factor
 
-    # def set_compensated_values(self):
-    #     for ix, param_n in enumerate(self.flcomp_ids):
-    #         param_data = self.channel.get(param_n)
-    #         comp_factor = self._comp_matrix[:,ix].sum()
-    #         self.compensated[param_n] = param_data * comp_factor
-    #
 
     def set_logscale_compensated(self):
         if not self.log_flcomp_ids:
-            print('>>> No compensated params have log scaling.')
+            print('>>> No compensated parameters have log scaling.')
             return
 
         if not self.compensated:

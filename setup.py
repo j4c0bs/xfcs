@@ -17,6 +17,7 @@ from codecs import open
 from os import path
 import sys
 
+from xfcs.version import VERSION
 
 if sys.argv[-1] == 'setup.py':
     print("To install xfcs, run 'python setup.py install'\n")
@@ -31,7 +32,7 @@ here = path.abspath(path.dirname(__file__))
 
 setup(
     name='xfcs',
-    version='1.1.1',
+    version=VERSION,
     description='Extract Flow Cytometry data from FCS files version 3+.',
     long_description=open('README.rst').read(),
     url='https://github.com/j4c0bs/xfcs',

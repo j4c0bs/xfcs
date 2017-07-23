@@ -114,11 +114,11 @@ def batch_export_data(fcs_paths, data_choices, metadata, norm_count, norm_time, 
             else:
                 print('>>> fcs data set <{}> is unavailable.'.format(user_option))
 
-        print('---> Data sets extracted to file:', write_count)
+        print('>>> Data sets extracted to file:', write_count)
 
         if metadata:
             write_obj_metadata(fcs)
-            print('---> metadata generated for:', fcs.name)
+            print('>>> Metadata generated for:', fcs.name)
 
 # ------------------------------------------------------------------------------
 def main():
@@ -144,9 +144,10 @@ def main():
     batch_export_data(fcs_paths, data_choices, *output)
 
     end = time.perf_counter() - start
-    x_ave = end / len(fcs_paths)
-    print('ave: {:.4f} sec, total: {:.4f} sec'.format(x_ave, end).rjust(80, ' '))
-
+    n_files = len(fcs_paths)
+    x_ave = end / n_files
+    txt = '\nfcs files: {}, ave/total: {:.3f}/{:.3f} sec'.format(n_files, x_ave, end)
+    print(txt)
     print()
 
 

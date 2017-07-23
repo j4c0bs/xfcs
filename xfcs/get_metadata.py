@@ -135,10 +135,9 @@ def load_metadata(paths):
     for filepath in paths:
         fcs = FCSFile()
         fcs.load(filepath)
-        src_dir, src_file = os.path.split(os.path.abspath(filepath))
         fcs.set_param('CSV_CREATED', time.strftime('%m/%d/%y %H:%M:%S'))
-        fcs.set_param('SRC_DIR', src_dir)
-        fcs.set_param('SRC_FILE', src_file)
+        fcs.set_param('SRC_DIR', fcs.parentdir)
+        fcs.set_param('SRC_FILE', fcs.name)
 
         meta_keys.extend((mk for mk in fcs.param_keys if mk not in meta_keys))
         fcs_objs.append(fcs)
@@ -170,11 +169,10 @@ def merge_metadata(fcs_objs, meta_keys, tidy, fn_out=''):
     metadata_csv.write_file(fcs_objs, meta_keys, csv_fn, tidy)
     return csv_fn
 
-# >>> move to utils
+
 def fcs_to_csv_path(fcs_name, fcs_dir='', tidy=False):
     """Convert fcs filename to csv_metadata filename."""
 
-    # >>> for testing, disable writing csv files in place
     desc = '-t' if tidy else '-w'
     filename = fcs_name.split('.')[0]
     csv_fn = '{}_metadata{}.csv'.format(filename, desc)
@@ -187,11 +185,10 @@ def fcs_to_csv_path(fcs_name, fcs_dir='', tidy=False):
 def write_obj_metadata(fcs):
     meta_keys = list(FORCED_SRC_KEYS)
     meta_keys.extend(fcs.param_keys)
-    fcs_dir, fcs_name = os.path.split(fcs.filepath)
-    csv_fn = fcs_to_csv_path(fcs_name, fcs_dir)
+    csv_fn = fcs_to_csv_path(fcs.name, fcs.parentdir)
     fcs.set_param('CSV_CREATED', time.strftime('%m/%d/%y %H:%M:%S'))
-    fcs.set_param('SRC_DIR', fcs_dir)
-    fcs.set_param('SRC_FILE', fcs_name)
+    fcs.set_param('SRC_DIR', fcs.parentdir)
+    fcs.set_param('SRC_FILE', fcs.name)
     metadata_csv.write_file((fcs,), meta_keys, csv_fn, tidy=False)
 
 
@@ -210,9 +207,7 @@ def batch_separate_metadata(fcs_objs, meta_keys, tidy):
     csv_paths = []
     for fcs in fcs_objs:
         sep_keys = tuple(key for key in meta_keys if fcs.has_param(key))
-        csv_fn = fcs_to_csv_path(fcs.name, tidy=tidy)
-        # csv_fn = fcs_to_csv_path(fcs.param('SRC_FILE'), fcs.param('SRC_DIR'), tidy=tidy)
-        # csv_fn = fcs_to_csv_path(fcs.param('SRC_FILE'), tidy=tidy)
+        csv_fn = fcs_to_csv_path(fcs.name, fcs.parentdir, tidy=tidy)
         metadata_csv.write_file((fcs,), sep_keys, csv_fn, tidy)
         csv_paths.append(csv_fn)
     return csv_paths
@@ -349,14 +344,14 @@ def main():
 
         if args.sepfiles:
             csv_paths = batch_separate_metadata(fcs_objs, meta_keys, args.tidy)
-            print('>>> csv files written: {}'.format(len(csv_paths)))
+            print('\n>>> csv files written: {}\n'.format(len(csv_paths)))
         else:
             if check_user_mean_keys:
                 meta_keys = add_param_mean(fcs_objs, meta_keys)
 
             fn_out = '' if not args.output else args.output.name
             csv_out_path = merge_metadata(fcs_objs, meta_keys, args.tidy, fn_out)
-            print('>>> csv file written to: {}'.format(csv_out_path))
+            print('\n>>> csv file written to: {}\n'.format(csv_out_path))
 
 
 # ------------------------------------------------------------------------------

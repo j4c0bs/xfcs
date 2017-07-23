@@ -21,6 +21,7 @@
 """
 
 from itertools import chain
+import os
 import struct
 
 from xfcs.FCSFile.DataSection import DataSection
@@ -86,7 +87,7 @@ class FCSFile(object):
         Attributes:
             version: version ID for FCS file.
             name: filename of fcs file.
-            filepath: filepath of fcs file.
+            parentdir: directory containing fcs file.
             text: dict of text section metadata Parameter key, value pairs.
             param_keys: iterable of Parameter keys in order of location in fcs
                 text section.
@@ -98,7 +99,7 @@ class FCSFile(object):
 
         self.version = None
         self.name = ''
-        self.filepath = ''
+        self.parentdir = ''
         self.valid = False
         self.supported_format = False
         self._fcs = None
@@ -127,7 +128,7 @@ class FCSFile(object):
 
         fcs_obj = open(fcs_file, 'rb')
         self.name = fcs_obj.name
-        self.filepath = fcs_file
+        self.parentdir = os.path.dirname(os.path.abspath(fcs_file))
 
         version_id = fcs_obj.read(6).decode('utf-8')
 
@@ -180,15 +181,14 @@ class FCSFile(object):
     def check_file_format(self):
         self.valid = validate.required_keywords(self.text)
         vtxt = 'valid' if self.valid else 'invalid'
-        print('\n---> fcs file loaded:', self.name)
-        print('---> ver: {}, headers: {}'.format(self.version[3:], vtxt))
+        print('\n--> xfcs.load({})'.format(self.name))
+        print('>>> ver: {} - headers: {}'.format(self.version[3:], vtxt))
 
 
     def load_file_spec(self):
         _metadata = Metadata(self.version, self.text)
         self.spec = _metadata.spec
         self.supported_format = validate.file_format(self.text, self.spec)
-
 
 
     # --------------------------------------------------------------------------

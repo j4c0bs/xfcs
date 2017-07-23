@@ -80,13 +80,13 @@ class DataSection(object):
         comp_vals = [float(n) for n in spillover[n_channels + 1:]]
         spill_matrix = np.array(comp_vals).reshape(n_channels, n_channels)
         if np.any(spill_matrix < 0):
-            print('>>> spillover matrix contains negative values')
+            print('>>> spillover matrix contains negative values.')
             self._comp_matrix = spill_matrix
             return spill_matrix, comp_ids
 
         diagonals = np.unique(spill_matrix[np.diag_indices(n_channels)])
         if diagonals.size != 1:
-            print('>>> Aborting fluorescence compensation due to malformed matrix diagonals')
+            print('>>> Aborting fluorescence compensation due to malformed matrix diagonals.')
             return
 
         if diagonals.item(0) != 1:
