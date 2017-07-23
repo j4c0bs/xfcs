@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-# TODO: if --input, use fcs filenames --> csv filenames <---<---<---<---<---<---
-
 import argparse
 from itertools import compress
 import os

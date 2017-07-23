@@ -24,6 +24,17 @@ def get_log_decade_min(f1, f2):
 
 
 def fix_crossover(vals, max_val):
+    """Conforms time, event count values to cumulative if actual value exceeds
+    numeric maximum value for the file's word length.
+
+    Args:
+        vals: parameter's values as np.array
+        max_val: int - maximum possible value based on word length
+
+    Returns:
+        vals: np.array - ascending, cumulative values
+    """
+
     crossover_ix = np.where(vals[:-1] > vals[1:])[0]
     for ix in crossover_ix:
         vals = np.append(vals[:ix + 1], vals[ix + 1:] + max_val)
@@ -38,6 +49,16 @@ ParamSpec = namedtuple('Spec', _spec_fields)
 
 
 def load_param_spec(type_i=True, **ch_spec):
+    """Converts attributes for given parameter into formatted namedtuple.
+
+    Args:
+        type_i: bool - switch based on $DATATYPE to conform attr values
+        ch_spec: all required parameter attr as dict
+
+    Returns:
+        namedtuple ParamSpec instance of param attr values
+    """
+
     ch_vals = (ch_spec.get(spx_a) for spx_a in ('N', 'S', 'B', 'R', 'E', 'G'))
     name, long_name, word_len, max_range, scale, gain = ch_vals
     gain = 0 if not gain else gain
@@ -60,7 +81,11 @@ def load_param_spec(type_i=True, **ch_spec):
 
 # ------------------------------------------------------------------------------
 class ParameterData(object):
+    """Instantiates a ParameterData object"""
+
     def __init__(self, spec):
+        """Initializes ParameterData"""
+
         self.spec = spec
         self._config = None
         self.names = None
@@ -68,14 +93,12 @@ class ParameterData(object):
         self.ref_ids = []
         self.id_map = {}
         self._comp_matrix = None
-
         self.channel_ids = None
         self.bit_mask_ids = None
         self.log_ids = None
         self.linear_ids = None
         self.flcomp_ids = None
         self.log_flcomp_ids = None
-
         self._reference_channels = {}
         self.raw = None
         self.channel = {}
@@ -83,8 +106,8 @@ class ParameterData(object):
         self.xcxs = {}
         self.compensated = {}
         self.logscale_compensated = {}
-
         self._load_config()
+
 
     def __dir__(self):
         return self.keys()
@@ -137,8 +160,41 @@ class ParameterData(object):
             vals = tuple(compress(self.par_ids, vals))
         return vals
 
+
     def __update_id_maps(self, name, id_):
         self.id_map.update({name:id_, id_:name})
+
+
+    # --------------------------------------------------------------------------
+    def __load_id_maps(self):
+        """Creates symmetrical dict of all param names and their numeric id."""
+
+        self.id_map.update(dict(zip(self.par_ids, self.names)))
+        self.id_map.update(dict(zip(self.names, self.par_ids)))
+
+        rdx_names = []
+        for keyname in self.names:
+            name_ = ''.join(s if s.isalpha() else ' ' for s in keyname).casefold()
+            rdx_names.append(name_)
+
+        self.__norm_name_map = dict(zip(rdx_names, self.names))
+
+
+    def _load_config(self):
+        """Formats channel attributes for use in data transforms. Stored in
+        self._config dict mapping id to namedtuple.
+        Initializes par_ids, names, id_maps.
+        """
+
+        channel_spec = self.spec.channels
+
+        self._config = {
+            num: load_param_spec(type_i=self.spec.type_i, **channel_spec[num])
+            for num in channel_spec}
+
+        self.par_ids = tuple(sorted(channel_spec.keys()))
+        self.names = self.__get_ch_attr('name')
+        self.__load_id_maps()
 
 
     # --------------------------------------------------------------------------
@@ -264,31 +320,6 @@ class ParameterData(object):
         count_id = self.__load_ref_count(norm_count)
         self.ref_ids.append(count_id)
         self.par_ids = tuple(id_ for id_ in self.par_ids if id_ not in self.ref_ids)
-
-    # --------------------------------------------------------------------------
-    def __load_id_maps(self):
-
-        self.id_map.update(dict(zip(self.par_ids, self.names)))
-        self.id_map.update(dict(zip(self.names, self.par_ids)))
-
-        rdx_names = []
-        for keyname in self.names:
-            name_ = ''.join(s if s.isalpha() else ' ' for s in keyname).casefold()
-            rdx_names.append(name_)
-
-        self.__norm_name_map = dict(zip(rdx_names, self.names))
-
-
-    def _load_config(self):
-        channel_spec = self.spec.channels
-
-        self._config = {
-            num: load_param_spec(type_i=self.spec.type_i, **channel_spec[num])
-            for num in channel_spec}
-
-        self.par_ids = tuple(sorted(channel_spec.keys()))
-        self.names = self.__get_ch_attr('name')
-        self.__load_id_maps()
 
 
     # --------------------------------------------------------------------------

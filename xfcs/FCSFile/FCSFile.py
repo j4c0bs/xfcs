@@ -185,7 +185,7 @@ class FCSFile(object):
         vtxt = 'valid' if self.valid else 'invalid'
         stxt = 'supported' if self.supported_format else 'unsupported'
         print('\n--> xfcs.load({})'.format(self.name))
-        print('>>> ver: {} - headers: {} - data extraction: {}'.format(self.version[3:], vtxt, stxt))
+        print('    ver: {} - headers: {} - data extraction: {}'.format(self.version[3:], vtxt, stxt))
 
 
     def load_file_spec(self):

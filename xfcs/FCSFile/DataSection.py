@@ -6,7 +6,21 @@ import numpy as np
 from xfcs.FCSFile.ParameterData import ParameterData
 # ------------------------------------------------------------------------------
 class DataSection(object):
+    """Instantiates a DataSection object.
+    Separates raw data into separate parameter channels and delegates access to
+    raw / transformed data within ParameterData. Performs final prep to read
+    fluorescence compensation matrix and prepare comp factors, ids for use.
+    """
+
     def __init__(self, raw_data, spec, norm_count, norm_time):
+        """Initialize DataSection.
+
+        Attributes:
+            spec: namedtuple of all prepared metadata
+            raw, channel, scale, channel_scale, compensated, scale_compensated:
+                access points to retrieve data sets from ParameterData
+        """
+
         self.spec = spec
         self._comp_matrix = None
         self.__raw = None
@@ -18,10 +32,23 @@ class DataSection(object):
         self._parameter_data = ParameterData(spec)
         self._load_parameter_channels(raw_data, norm_count, norm_time)
 
+
     def __dir__(self):
+        """Prevents iPython tab complete from calling property descriptor attrs"""
         return self.keys()
 
+
     def _load_parameter_channels(self, raw_data, norm_count, norm_time):
+        """Separates numeric raw data into individual parameter channels.
+        Initializes ParameterData values, settings to prepare raw and channel
+        values.
+
+        Args:
+            raw_data: fcs data section read from bytes to int or float
+            norm_count: bool - enable count normalization
+            norm_time: bool - enable time normalization
+        """
+
         par = self.spec.par
         mode_dtype = np.dtype(self.spec.txt_dtype)
 
@@ -38,6 +65,7 @@ class DataSection(object):
         if self.spec.spillover:
             comp_matrix_map, comp_ids = self.__load_spillover_matrix()
             self._parameter_data.set_compensation_matrix(comp_matrix_map, comp_ids)
+
 
     # --------------------------------------------------------------------------
     @property
@@ -65,8 +93,16 @@ class DataSection(object):
         return self._parameter_data.get_scale_compensated()
 
     # --------------------------------------------------------------------------
-
     def __load_spillover_matrix(self):
+        """Calculates compensation matrix values based on spillover matrix.
+        Due to the lack of consistency in fcs file formats, if spillover matrix
+        contains negative values, it is assumed to be pre-formatted as the
+        compensation matrix.
+
+        Returns:
+            comp_matrix_map: dict mapping numeric param id to compensation factor
+            comp_ids: list of numeric param ids to compensate
+        """
 
         spillover = self.spec.spillover.split(',')
         n_channels = int(spillover[0])
@@ -87,7 +123,7 @@ class DataSection(object):
         diagonals = np.unique(spill_matrix[np.diag_indices(n_channels)])
         if diagonals.size != 1:
             print('>>> Aborting fluorescence compensation due to malformed matrix diagonals.')
-            return
+            return {}, []
 
         if diagonals.item(0) != 1:
             spill_matrix = spill_matrix / diagonals.item(0)

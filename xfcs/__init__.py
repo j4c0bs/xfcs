@@ -1,2 +1,1 @@
-from xfcs import FCSFile
-from xfcs import utils
+from xfcs.FCS import FCS
