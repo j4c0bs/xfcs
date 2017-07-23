@@ -13,6 +13,11 @@ Implemented parameter data set options:
     - fluorescence compensation
     - log10 scaled fluorescence compensation
 
+Metadata extraction features:
+    - merge or separate csv files
+    - rolling mean for any keyword with a numeric value
+    - append new fcs files to previously generated metadata csv file
+
 
 Installation
 ------------
