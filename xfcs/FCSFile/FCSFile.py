@@ -180,15 +180,17 @@ class FCSFile(object):
 
     def check_file_format(self):
         self.valid = validate.required_keywords(self.text)
+        self.supported_format = validate.file_mode_type(self.text)
+
         vtxt = 'valid' if self.valid else 'invalid'
+        stxt = 'supported' if self.supported_format else 'unsupported'
         print('\n--> xfcs.load({})'.format(self.name))
-        print('>>> ver: {} - headers: {}'.format(self.version[3:], vtxt))
+        print('>>> ver: {} - headers: {} - data extraction: {}'.format(self.version[3:], vtxt, stxt))
 
 
     def load_file_spec(self):
         _metadata = Metadata(self.version, self.text)
         self.spec = _metadata.spec
-        self.supported_format = validate.file_format(self.text, self.spec)
 
 
     # --------------------------------------------------------------------------
@@ -206,6 +208,8 @@ class FCSFile(object):
         if not (self.__header or self._fcs):
             print('>>> No FCS file loaded.')
             return
+
+        validate.file_format(self.text, self.spec)
 
         if self.spec.datatype == 'I':
             self.__read_int_data()

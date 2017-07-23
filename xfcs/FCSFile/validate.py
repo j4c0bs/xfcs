@@ -54,8 +54,12 @@ def file_format(text, spec):
     has_correct_word_len(spec.datatype, spec.word_len)
     has_correct_read_length(spec.data_len, spec.enddata, spec.begindata)
     has_one_data_set(text.get('$NEXTDATA', 0))
-
     return True
+
+
+def file_mode_type(text):
+    return text['$MODE'] == 'L' and text['$DATATYPE'] in ('I', 'F', 'D')
+
 
 # ------------------------------------------------------------------------------
 def required_keywords(text):
