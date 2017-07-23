@@ -13,7 +13,6 @@ $PnE:   Amplification type for parameter n.
 
 from collections import namedtuple
 from itertools import compress
-import sys
 import numpy as np
 import pandas as pd
 # ------------------------------------------------------------------------------

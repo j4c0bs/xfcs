@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """
     FCS file reader supporting file format spec 3.0, 3.1.
     Data extraction currently supports:
