@@ -37,7 +37,7 @@ def parse_arguments():
 
     dsval.add_argument(
         '--xcxs', '-x', action='store_true',
-        help='Log scale values and any non-log channel values.')
+        help='Scale values and any non-scaled channel values.')
 
     dsval.add_argument(
         '--fl-comp', '-f', action='store_true', dest='fl_comp',

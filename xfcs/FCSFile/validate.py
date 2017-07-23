@@ -49,7 +49,6 @@ def has_one_data_set(nextdata):
 
 
 def file_format(text, spec):
-
     is_list_mode(text['$MODE'])
     is_supported_datatype(spec.datatype)
     has_correct_word_len(spec.datatype, spec.word_len)

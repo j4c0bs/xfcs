@@ -55,7 +55,7 @@ def parse_arguments():
         dest='merge', help='Append fcs metadata to existing fcs metadata csv file.')
 
     kw_merge.add_argument(
-        '--kw-filter', '-k', type=argparse.FileType('r'), metavar='<user_kw.csv>',
+        '--kw-filter', '-k', type=argparse.FileType('r'), metavar='<user_kw.txt>',
         dest='kw_filter', help='Filter output with USER KeyWord preferences file.')
 
     kw_merge.add_argument(
