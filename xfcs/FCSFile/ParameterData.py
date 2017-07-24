@@ -1,5 +1,6 @@
-# {'B': 16, 'E': '0.0,0.0', 'N': 'TIME', 'R': 65536, 'S': 'Time LSW'}
 """
+{'B': 16, 'E': '0.0,0.0', 'N': 'TIME', 'R': 65536, 'S': 'Time LSW'}
+
 $PnN:   Short name for parameter n.
 $PnS:   (optional) - Long name for parameter n.
 $PnB:   Number of bits reserved for parameter number n.
@@ -9,7 +10,6 @@ $PnE:   Amplification type for parameter n.
     f1 = log maximum decade and f2 = log minimum decade
     Most fcs files improperly use f2=0.0, f2=1.0 is assigned in this case.
 """
-
 
 from collections import namedtuple
 from itertools import compress
@@ -42,21 +42,16 @@ def fix_crossover(vals, max_val):
 
 
 # ------------------------------------------------------------------------------
-_spec_fields = (
-    'name', 'long', 'word_len', 'bit_mask', 'max_range', 'log_max', 'log_min', 'gain')
-
-ParamSpec = namedtuple('Spec', _spec_fields)
-
-
-def load_param_spec(type_i=True, **ch_spec):
-    """Converts attributes for given parameter into formatted namedtuple.
+def format_attr(type_i, **ch_spec):
+    """Converts attributes for given parameter into useable format for data
+    scaling and transforms.
 
     Args:
         type_i: bool - switch based on $DATATYPE to conform attr values
         ch_spec: all required parameter attr as dict
 
     Returns:
-        namedtuple ParamSpec instance of param attr values
+        tuple of param attr values
     """
 
     ch_vals = (ch_spec.get(spx_a) for spx_a in ('N', 'S', 'B', 'R', 'E', 'G'))
@@ -73,7 +68,7 @@ def load_param_spec(type_i=True, **ch_spec):
         bit_mask, max_range, f1_dec_max, f2_dec_min = 0, 0, 0, 0
 
     vals = (name, long_name, word_len, bit_mask, max_range, f1_dec_max, f2_dec_min, gain)
-    return ParamSpec(*vals)
+    return vals
 
 
 # def archyperbolicsine_scale(self, X):
@@ -188,8 +183,14 @@ class ParameterData(object):
 
         channel_spec = self.spec.channels
 
+        _spec_fields = (
+            'name', 'long', 'word_len', 'bit_mask', 'max_range', 'log_max',
+            'log_min', 'gain')
+
+        ParamSpec = namedtuple('SPn', _spec_fields)
+
         self._config = {
-            num: load_param_spec(type_i=self.spec.type_i, **channel_spec[num])
+            num: ParamSpec(*format_attr(self.spec.type_i, **channel_spec[num]))
             for num in channel_spec}
 
         self.par_ids = tuple(sorted(channel_spec.keys()))
@@ -208,6 +209,8 @@ class ParameterData(object):
 
 
     def __normalize_count(self, event_count):
+        """Starts event count parameter at 1"""
+
         start_val = event_count.item(0)
         diff = start_val - 1
         if start_val < 0:
@@ -217,6 +220,16 @@ class ParameterData(object):
 
 
     def __scale_count(self, count_id, norm):
+        """Applies bit mask and/or normalization to event count parameter.
+
+        Args:
+            count_id: numeric parameter id for event count
+            norm: bool - user enabled option to enforce count starting at 1
+
+        Returns:
+            np.array event count values
+        """
+
         event_count = self.raw[count_id]
         event_spec = self._config.get(count_id)
         if event_spec.bit_mask:
@@ -229,6 +242,17 @@ class ParameterData(object):
 
 
     def __load_ref_count(self, norm):
+        """Locates or creates event count parameter. Checks for values exceeding
+        maximum possible based on word length. Count is assigned to id -1 and
+        stored in _reference_channels.
+
+        Arg:
+            norm: bool - user enabled option to enforce count starting at 1
+
+        Returns:
+            numeric parameter id (-1)
+        """
+
         count_id = self.__locate_count_param()
         if count_id:
             event_count = self.__scale_count(count_id, norm)
@@ -244,6 +268,12 @@ class ParameterData(object):
 
     # --------------------------------------------------------------------------
     def __locate_time_params(self):
+        """Locates any parameter name ($PnN or $PnS) containing time, msw, lsw.
+
+        Returns:
+            for each time param, numeric id or 0 if not located
+        """
+
         time_id, time_lsw, time_msw = 0, 0, 0
         long_names = self.__get_ch_attr('long')
         for name, long_name in zip(self.names, long_names):
@@ -266,6 +296,17 @@ class ParameterData(object):
 
 
     def __encode_time(self, time_lsw, time_msw):
+        """Converts 2 single word length time parameters into actual, double word
+        length time measurement.
+
+        Args:
+            time_lsw: lsw time parameter id
+            time_msw: msw time parameter id
+
+        Returns:
+            np.array - actual time values
+        """
+
         msw_word_len = self._config.get(time_msw).word_len
         msw_data = self.raw.get(time_msw)
         lsw_data = self.raw.get(time_lsw)
@@ -274,6 +315,17 @@ class ParameterData(object):
 
 
     def __load_ref_time(self, norm):
+        """Loads time parameter and determines if it exists, or it is split
+        between lsw and msw. Applies $TIMESTEP (and gain) factor.
+        Stored in _reference_channels as id 0.
+
+        Arg:
+            norm: bool - user enabled option to enforce time starting at 0.0
+
+        Returns:
+            list of non-zero time ids
+        """
+
         time_lsw, time_msw, time_id = self.__locate_time_params()
         if time_id and (time_lsw or time_msw) and not(time_lsw and time_msw):
             if time_lsw:
@@ -313,6 +365,15 @@ class ParameterData(object):
 
 
     def load_reference_channels(self, norm_count, norm_time):
+        """Initializes time and event count parameters to be stored in
+        _reference_channels under ids 0, -1. Filters any time, event count ids
+        from par_ids.
+
+        Args:
+            norm_count: bool - user enabled option to enforce count starting at 1
+            norm_time: bool - user enabled option to enforce time starting at 0.0
+        """
+
         time_ids = self.__load_ref_time(norm_time)
         if time_ids:
             self.ref_ids.extend(time_ids)
@@ -363,6 +424,10 @@ class ParameterData(object):
 
     # --------------------------------------------------------------------------
     def _set_group_ids(self):
+        """Configs group ids for channel, log scale, gain scale, xcxs data sets.
+        Compensation id groups are configured separately alongside comp matrix.
+        """
+
         self.channel_ids = self.par_ids[:]
         self.bit_mask_ids = self.__get_ch_attr('bit_mask', dropzero=True)
 
@@ -376,6 +441,8 @@ class ParameterData(object):
 
 
     def set_channel_values(self):
+        """All parameters, with bit mask if applicable."""
+
         self._set_group_ids()
 
         for param_n in self.bit_mask_ids:
@@ -386,8 +453,7 @@ class ParameterData(object):
 
 
     def set_xcxs_values(self):
-        """channel values and any log scaled params
-        """
+        """Channel parameters without log scaling, any log scaled parameters."""
 
         if not self.scale:
             self.set_scale_values()
@@ -400,19 +466,33 @@ class ParameterData(object):
 
     # --------------------------------------------------------------------------
     def __log_scale(self, param_n, src_group):
+        """Applies log10 scaing based on $PnE value.
+
+        Args:
+            param_n: parameter id
+            src_group: data set for parameter source values to be scaled
+
+        Returns:
+            np.array with log10 scaled values
+        """
+
         spec_ = self._config.get(param_n)
         param_data = src_group.get(param_n)
         return 10**(spec_.log_max * param_data / spec_.max_range) * spec_.log_min
 
 
     def __gain_scale(self, param_n, src_group):
+        """Applies gain scaling based on $PnG value."""
+
         spec_ = self._config.get(param_n)
         param_data = src_group.get(param_n)
         return param_data / spec_.gain
 
 
     def set_scale_values(self):
-        # ---> $Param can have gain or log but not both
+        """All parameters that have log10 or gain scaling applied.
+        Parameters cannot have both scaling methods.
+        """
 
         for param_n in self.log_ids:
             log_data = self.__log_scale(param_n, self.channel)
@@ -433,12 +513,20 @@ class ParameterData(object):
             return True
 
     def set_compensation_matrix(self, comp_matrix_map, fl_comp_ids):
+        """Sets values for compensation matrix, id groups.
+        _comp_matrix is a dict mapping param id to compensation factor.
+        """
+
         self._comp_matrix = comp_matrix_map
         self.flcomp_ids = fl_comp_ids
         self.log_flcomp_ids = tuple(set(self.log_ids) & set(self.flcomp_ids))
 
 
     def set_compensated_values(self):
+        """Applies compensation scaling for any parameter located in compensation
+        matrix ($SPILLOVER).
+        """
+
         for param_n in self.flcomp_ids:
             param_data = self.channel.get(param_n)
             comp_factor = self._comp_matrix[param_n]
@@ -446,6 +534,10 @@ class ParameterData(object):
 
 
     def set_logscale_compensated(self):
+        """Applies log10 scaling for parameters located in compensation matrix
+        that have a log10 scaling value.
+        """
+
         if not self.log_flcomp_ids:
             print('>>> No compensated parameters have log scaling.')
             return
