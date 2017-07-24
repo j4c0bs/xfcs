@@ -164,16 +164,10 @@ class FCSFile(object):
         tokens = fcs_obj.read(_read_len).decode('utf-8').split(text_delimiter)
 
         # Collect Parameter keys and values for text map
-        all_keys = [key.strip().upper() for key in tokens[::2] if key]
+        all_keys = [key.strip().upper() for key in tokens[::2]]
         all_vals = [filter_numeric(val.strip()) for val in tokens[1::2]]
-        self.text = {key:val for key, val in zip(all_keys, all_vals)}
-
-        if len(all_keys) > len(self.text):
-            n = -1 * (len(all_keys) - len(self.text))
-            self.param_keys = tuple(all_keys[:n])
-        else:
-            self.param_keys = tuple(all_keys)
-
+        self.text = {key:val for key, val in zip(all_keys, all_vals) if key}
+        self.param_keys = tuple(kw for kw in all_keys if kw)
         self.__update_key_set()
         self.check_file_format()
 
