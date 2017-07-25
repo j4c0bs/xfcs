@@ -7,7 +7,6 @@ $ENDSTEXT $MODE $NEXTDATA $PAR $TOT $PnB $PnE $PnN $PnR
 """
 
 from collections import namedtuple
-# from itertools import compress
 
 import numpy as np
 # ------------------------------------------------------------------------------
@@ -115,12 +114,6 @@ class Metadata(object):
 
         for attr_name, val in zip(attr_names, vals):
             self._add_to_spec(attr_name, set_val=val)
-
-        # self._add_to_spec('channels', set_val=channels)
-        # self._add_to_spec('word_len', set_val=word_len)
-        # self._add_to_spec('data_len', set_val=data_len)
-        # self._add_to_spec('txt_dtype', set_val=txt_dtype)
-        # self._add_to_spec('max_val', set_val=max_val)
 
 
     def _required_keywords(self):

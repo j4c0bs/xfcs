@@ -57,11 +57,12 @@ class FCSFile(object):
     """Instantiates an FCSFile object.
 
     Public Attributes:
-        version
+        version: version ID for FCS file.
+        name: filename of fcs file.
+        parentdir: directory containing fcs file.
         text: dict containing all Parameter metadata key : value
         param_keys: iterable of Parameter keys in order of location in fcs text section
-
-        data ->
+        data: Data class instance to access extracted data sets.
 
     Public Methods:
         load: Load an FCS file for reading and confirm version id is supported.

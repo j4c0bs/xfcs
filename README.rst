@@ -1,6 +1,7 @@
 xfcs
 =======
 Extract metadata and data from FCS 3.0/3.1 files.
+
 Data extraction supports file formats:
     - Mode: List (L)
     - Datatypes: I, F, D
