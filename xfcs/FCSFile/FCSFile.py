@@ -173,6 +173,11 @@ class FCSFile(object):
         self.check_file_format()
 
 
+    def close(self):
+        if not self._fcs.closed:
+            self._fcs.close()
+
+
     def check_file_format(self):
         self.valid = validate.required_keywords(self.text)
         self.supported_format = validate.file_mode_type(self.text)

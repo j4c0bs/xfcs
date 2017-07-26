@@ -139,6 +139,7 @@ def load_metadata(paths):
 
         meta_keys.extend((mk for mk in fcs.param_keys if mk not in meta_keys))
         fcs_objs.append(fcs)
+        fcs.close()
 
     return fcs_objs, meta_keys
 
