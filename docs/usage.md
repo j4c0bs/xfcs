@@ -62,8 +62,8 @@ Any parameter with both compensation and log10 scaling. Log scaling is applied t
 
 Extracts all header and text section keyword, value pairs and writes content to csv file. Multiple FCS files can be written to the same csv file regardless of shared keywords. Default format is wide.
 
-##### Tidy format:
-Outputs CSV in tidy (long) format.
+##### Third normal form (long, tidy):
+Outputs CSV in long format where each row is one fcs file.
     --tidy, -t
 
 ##### Additional Input Option:
@@ -88,7 +88,7 @@ Default behavior is for all FCS files to be included within the same csv file an
     --append-to <metadata_filepath.csv>, -a <metadata_filepath.csv>
 
 ##### Metadata Numeric Keyword Mean:
-Using the FCS_USER_KW.txt file, a numeric keyword can have a rolling mean column added to metadata output. Default historic mean range is 10 but can be customized. Appending MEAN to any keyword will enable this feature. 
+Using the FCS_USER_KW.txt file, a numeric keyword can have a rolling mean column added to metadata output. Default historic mean range is 10 but can be customized. Appending MEAN to any keyword will enable this feature.
 
 Example keyword: $P25V
 - enable mean column

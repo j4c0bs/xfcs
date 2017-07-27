@@ -61,8 +61,8 @@ def parse_arguments():
         help='Generate user keyword text file.')
 
     parser.add_argument(
-        '--tidy', '-t', action='store_true',
-        help='Outputs CSV in tidy (long) format.')
+        '--thirdnormal', '-t', action='store_true', dest='tidy',
+        help='Outputs CSV in third normal form (long).')
 
     parser.add_argument('-v', '--version', action='version', version=VERSION)
 
