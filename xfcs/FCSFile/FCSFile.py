@@ -22,6 +22,7 @@
 
 from itertools import chain
 import os
+import re
 import struct
 
 from xfcs.FCSFile.DataSection import DataSection
@@ -107,9 +108,11 @@ class FCSFile(object):
         self.__header = None
         self.text = {}
         self.param_keys = None
+        self._param_values = None
         self.__key_set = {}
         self.__n_keys = 0
         self.spec = None
+        self.__hashkey = ''
         self.__raw_data = None
         self.data = None
         self.__supp_text = None
@@ -127,9 +130,12 @@ class FCSFile(object):
                 NotImplementedError: if fcs file format version is not supported
         """
 
+        if self._fcs:
+            self.__init__()
+
         fcs_obj = open(fcs_file, 'rb')
-        self.name = fcs_obj.name
-        self.parentdir = os.path.dirname(os.path.abspath(fcs_file))
+
+        self.parentdir, self.name = os.path.split(os.path.abspath(fcs_file))
 
         version_id = fcs_obj.read(6).decode('utf-8')
 
@@ -161,14 +167,16 @@ class FCSFile(object):
         # Read the TEXT section
         fcs_obj.seek(self.__header['text_start'])
         text_delimiter = fcs_obj.read(1).decode('utf-8')
-        _read_len = self.__header['text_end'] - self.__header['text_start']
+        _read_len = self.__header['text_end'] - self.__header['text_start'] - 1
         tokens = fcs_obj.read(_read_len).decode('utf-8').split(text_delimiter)
 
         # Collect Parameter keys and values for text map
-        all_keys = [key.strip().upper() for key in tokens[::2]]
-        all_vals = [filter_numeric(val.strip()) for val in tokens[1::2]]
-        self.text = {key:val for key, val in zip(all_keys, all_vals) if key}
-        self.param_keys = tuple(kw for kw in all_keys if kw)
+        all_keys = tuple(key.strip().upper() for key in tokens[::2])
+        all_vals = tuple(filter_numeric(val.strip()) for val in tokens[1::2])
+        self.text = dict(zip(all_keys, all_vals))
+        self.param_keys = all_keys
+        self._param_values = all_vals
+
         self.__update_key_set()
         self.check_file_format()
 
@@ -181,11 +189,11 @@ class FCSFile(object):
     def check_file_format(self):
         self.valid = validate.required_keywords(self.text)
         self.supported_format = validate.file_mode_type(self.text)
-
-        vtxt = 'valid' if self.valid else 'invalid'
-        stxt = 'supported' if self.supported_format else 'unsupported'
-        print('\n--> xfcs.load({})'.format(self.name))
-        print('    ver: {} - headers: {} - data extraction: {}'.format(self.version[3:], vtxt, stxt))
+        print('--> xfcs.load({})'.format(self.name))
+        # vtxt = 'valid' if self.valid else 'invalid'
+        # stxt = 'supported' if self.supported_format else 'unsupported'
+        # print('\n--> xfcs.load({})'.format(self.name))
+        # print('    ver: {} - headers: {} - data extraction: {}'.format(self.version[3:], vtxt, stxt))
 
 
     def load_file_spec(self):
@@ -239,7 +247,7 @@ class FCSFile(object):
     def __read_int_data(self):
         """Reads fcs $DATATYPE I - integer data with fixed word length"""
 
-        data_start, data_end = self.__get_data_seek()
+        data_start, _ = self.__get_data_seek()
         self._fcs.seek(data_start)
 
         nbytes = self.spec.word_len // 8
@@ -305,12 +313,24 @@ class FCSFile(object):
             meta_keys = self.param_keys
 
         for param in meta_keys:
-            if param in ('SRC_DIR', 'CSV_CREATED'):
+            if param in ('SRC_DIR', 'SRC_FILE', 'CSV_CREATED'):
                 continue
             txt.extend((param, str(self.text[param])))
 
-        mrg_txt = ''.join(txt)
-        return hash(mrg_txt)
+        return hash(''.join(txt))
+
+
+    @property
+    def hashkey(self):
+        """Creates hash fingerprint using ordered text section keywords and
+        values for required channel parameter keywords ($PxBENR).
+        """
+
+        if not self.__hashkey:
+            ch_key = re.compile(r'^\$P\d+[BENR]$', re.IGNORECASE)
+            ch_vals = (str(self.text[kw]) for kw in self.param_keys if ch_key.match(kw))
+            self.__hashkey = hash(''.join(chain.from_iterable((self.param_keys, ch_vals))))
+        return self.__hashkey
 
 
     def has_param(self, key):
@@ -344,7 +364,7 @@ class FCSFile(object):
         self.text[param] = value
 
 
-    def __write(self, f):
+    def __write(self):
         """Write an FCS file (not implemented)"""
         raise NotImplementedError("Can't write FCS files yet")
 
