@@ -3,36 +3,80 @@ from itertools import compress
 import re
 from statistics import mean
 
-# ------------------------------- $Px STATS ------------------------------------
-def find_spx_mean_params(user_meta_keys):
-    """Finds any user specified parameter keywords to include a rolling mean value.
-        Example keywords: $P10V_MEAN, $P10V_MEAN_5, $TOT_MEAN
+# ------------------------------- KW  STATS ------------------------------------
 
-    Arg:
-        user_meta_keys: iterable of param keys read from user_kw_prefs text file.
+def prep_re_group(re_groupdict):
+    param_key = re_groupdict.get('param')
+    channel_name = re_groupdict.get('channel', '').strip('_').replace(' ','').upper()
+    tmp_val = re_groupdict.get('val', '')
+    if not tmp_val:
+        mean_range = 10
+    else:
+        mean_range = int(tmp_val.strip('_'))
 
-    Returns:
-        param_key_ranges: iterable of tuples containing -
-        parameter key, parameter_MEAN key, historic range int for rolling mean.
-    """
+    return param_key, mean_range, channel_name
 
-    user_mean_key = re.compile(r'^(.+)_MEAN(_\d+)?$')
 
-    param_key_ranges = []
-    for param_mean_key in user_meta_keys:
-        kw_match = user_mean_key.match(param_mean_key)
+def config_spx_mean_keys(fcs_objs, spx_keys):
+    spx_mean_keys = []
 
-        if kw_match:
-            param_key, mean_range = kw_match.groups()
-            if mean_range:
-                mean_range = int(mean_range.strip('_'))
+    for spx_key in spx_keys:
+        param_key, mean_range, channel_name = prep_re_group(spx_key.groupdict())
+        attr = ''.join(a for a in param_key[3:] if a.isalpha())
+        new_data_key = '$Px{}_{}'.format(attr, channel_name)
 
-            if not mean_range:
-                mean_range = 10
+        for fcs in fcs_objs:
+            if fcs.has_param(new_data_key):
+                data_key = new_data_key
+            else:
+                data_key = fcs.get_attr_by_channel_name(channel_name, attr)
+                if data_key:
+                    fcs.set_param(new_data_key, fcs.param(data_key))
 
-            param_key_ranges.append((param_key, param_mean_key, mean_range))
+        mean_key = '{}_MEAN_{}'.format(new_data_key, mean_range)
+        force_key = new_data_key
+        user_key = spx_key.string
+        key_group = (data_key, force_key, mean_key, mean_range)
+        spx_mean_keys.append((user_key, key_group))
 
-    return param_key_ranges
+    return spx_mean_keys
+
+
+def config_param_mean_keys(par_keys):
+    param_mean_keys = []
+    for par_match in par_keys:
+        data_key, mean_range, _ = prep_re_group(par_match.groupdict())
+        mean_key = par_match.string
+        force_key = data_key
+
+        user_key = par_match.string
+        key_group = (data_key, force_key, mean_key, mean_range)
+
+        param_mean_keys.append((user_key, key_group))
+    return param_mean_keys
+
+
+def find_mean_keys(fcs_objs, user_meta_keys):
+    spx_re = r'^(?P<param>\$P(x|\d+)\w)_(?P<channel>\w+)_MEAN(?P<val>_\d+)?$'
+    spx_mean = re.compile(spx_re, re.IGNORECASE)
+    par_mean = re.compile(r'^(?P<param>.+)_MEAN(?P<val>_\d+)?$')
+
+    mean_keys, spx_keys, par_keys = [], [], []
+
+    for kw in user_meta_keys:
+        spx_match = spx_mean.match(kw)
+        if spx_match:
+            spx_keys.append(spx_match)
+        else:
+            par_match = par_mean.match(kw)
+            if par_match:
+                par_keys.append(par_match)
+
+    if spx_keys:
+        mean_keys.extend(config_spx_mean_keys(fcs_objs, spx_keys))
+    if par_keys:
+        mean_keys.extend(config_param_mean_keys(par_keys))
+    return mean_keys
 
 
 def add_param_mean(fcs_objs, user_meta_keys):
@@ -41,49 +85,62 @@ def add_param_mean(fcs_objs, user_meta_keys):
 
     Args:
         fcs_objs: iterable of loaded FCSFile instances.
-        user_meta_keys: iterable of param keys read from user_kw_prefs text file.
+        user_meta_keys: iterable of param keys read from user_kw_prefs text file
+            or keys found in master csv for appending new data.
 
     Returns:
         user_meta_keys: param keyword list filtered for any missing or malformed
             user keywords.
     """
 
-    param_key_ranges = find_spx_mean_params(user_meta_keys)
-    if not param_key_ranges:
+    if not any('_MEAN' in key.upper() for key in user_meta_keys):
         return user_meta_keys
 
-    missing_spx_keys = []
-    volt_keys = []
+    mean_keys = find_mean_keys(fcs_objs, user_meta_keys)
+    if not mean_keys:
+        return user_meta_keys
 
-    for param_key, param_mean_key, mean_range in param_key_ranges:
-        if not any(fcs.has_param(param_key) for fcs in fcs_objs):
-            missing_spx_keys.extend((param_key, param_mean_key))
+    ignore_keys = []
+
+    for user_key, key_group in mean_keys:
+        data_key, force_key, mean_key, mean_range = key_group
+
+        if not any(fcs.has_param(force_key) for fcs in fcs_objs):
+            ignore_keys.extend((data_key, force_key, mean_key))
             continue
-        elif not all(fcs.param_is_numeric(param_key) for fcs in fcs_objs):
-            missing_spx_keys.append(param_mean_key)
+
+        elif not all(fcs.param_is_numeric(force_key) for fcs in fcs_objs):
+            ignore_keys.extend((data_key, force_key, mean_key))
             continue
 
-        volt_keys.append((param_key, param_mean_key))
+        channel_mean = []
+        ch_queue = deque(maxlen=mean_range)
+        spx_data = (fcs.numeric_param(force_key) for fcs in fcs_objs)
 
-        volt_mean = []
-        v_queue = deque(maxlen=mean_range)
-        spx_data = (x.numeric_param(param_key) for x in fcs_objs)
+        # calculate all rolling mean values for parameter
+        for channel_value in spx_data:
+            ch_queue.append(channel_value)
+            channel_mean.append(mean(ch_queue))
 
-        for volt in spx_data:
-            v_queue.append(volt)
-            volt_mean.append(mean(v_queue))
+        # sets mean param, value for each fcs object
+        for fcs, channel_value in zip(fcs_objs, channel_mean):
+            fcs.set_param(mean_key, round(channel_value, 4))
 
-        for x, volt in zip(fcs_objs, volt_mean):
-            x.set_param(param_mean_key, round(volt, 2))
+        # force parameter keys included if only kw_MEAN in user kw file
+        if force_key not in user_meta_keys:
+            if user_key == mean_key:
+                ix = user_meta_keys.index(mean_key)
+                user_meta_keys.insert(ix, force_key)
+            else:
+                user_meta_keys.append(force_key)
 
-    # force parameter keys included if only $Px_MEAN in user kw file
-    for (param_key, param_mean_key) in volt_keys:
-        if param_key not in user_meta_keys:
-            ix = user_meta_keys.index(param_mean_key)
-            user_meta_keys.insert(ix, param_key)
+        # replaces user $PnA_MEAN key with $PxA_MEAN
+        if user_key != mean_key:
+            user_meta_keys.append(mean_key)
+            ignore_keys.append(user_key)
 
-    if missing_spx_keys:
-        drop_keys = (k not in missing_spx_keys for k in user_meta_keys)
+    if ignore_keys:
+        drop_keys = (k not in ignore_keys for k in user_meta_keys)
         user_meta_keys = tuple(compress(user_meta_keys, drop_keys))
 
     return user_meta_keys

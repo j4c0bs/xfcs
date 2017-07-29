@@ -264,6 +264,12 @@ def append_metadata(fcs_objs, meta_keys, master_csv, fn_out):
         USER_KW_PREFS is bypassed and keyword set from master csv acts as
         keyword filter.
 
+    Args:
+        fcs_objs: iterable of metadata dicts.
+        meta_keys: all text param keywords located in new fcs files.
+        master_csv: filepath existing metadata csv file.
+        fn_out: output csv filepath - user can select new file for merging
+            insead of appending.
     """
 
     merge_keys, merge_data, is_tidy = metadata_csv.read_file(master_csv, meta_keys)

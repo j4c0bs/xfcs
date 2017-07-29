@@ -111,6 +111,7 @@ class FCSFile(object):
         self._param_values = None
         self.__key_set = {}
         self.__n_keys = 0
+        self._name_id = None
         self.spec = None
         self.__hashkey = ''
         self.__raw_data = None
@@ -331,6 +332,21 @@ class FCSFile(object):
             ch_vals = (str(self.text[kw]) for kw in self.param_keys if ch_key.match(kw))
             self.__hashkey = hash(''.join(chain.from_iterable((self.param_keys, ch_vals))))
         return self.__hashkey
+
+
+    def get_attr_by_channel_name(self, channel_name, attr):
+        """Pre-format channel_name to remove spaces and force upper case.
+            e.g. FL 5 Log --> FL5LOG
+        """
+
+        if not self._name_id:
+            self._name_id = {
+                v.replace(' ','').upper():k[:-1]
+                for k,v in self.text.items()
+                if k.startswith('$P') and k.endswith('N')}
+
+        spx_id = self._name_id.get(channel_name, '') + attr
+        return spx_id if self.has_param(spx_id) else ''
 
 
     def has_param(self, key):
