@@ -7,7 +7,7 @@ import sys
 import time
 
 from xfcs.FCSFile.FCSFile import FCSFile, channel_name_keywords
-from xfcs.utils import metadata_csv, metadata_time
+from xfcs.utils import metadata_csv, metadata_time, metadata_plot
 from xfcs.utils.locator import locate_fcs_files
 from xfcs.utils.metadata_stats import add_param_mean
 from xfcs.version import VERSION
@@ -67,6 +67,10 @@ def parse_arguments():
     parser.add_argument(
         '--thirdnormal', '-t', action='store_true', dest='tidy',
         help='Outputs CSV in third normal form (long).')
+
+    parser.add_argument(
+        '--dashboard', action='store_true',
+        help='Generate interactive plot with current metadata scan.')
 
     parser.add_argument(
         '-q', '--quiet', action='store_true',
@@ -373,6 +377,10 @@ def main():
             fn_out = '' if not args.output else args.output.name
             csv_out_path = merge_metadata(fcs_objs, meta_keys, args.tidy, fn_out)
             print('\n>>> csv file written to: {}\n'.format(csv_out_path))
+
+
+    if args.dashboard:
+        metadata_plot.dashboard(fcs_objs, meta_keys)
 
 
 # ------------------------------------------------------------------------------
