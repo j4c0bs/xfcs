@@ -1,6 +1,6 @@
 xfcs
 =======
-Extract metadata and data from FCS 3.0/3.1 files.
+Extract metadata and data from FCS (3.0, 3.1) files.
 
 Data extraction supports file formats:
     - Mode: List (L)
@@ -15,6 +15,7 @@ Implemented parameter data set options:
     - log10 scaled fluorescence compensation
 
 Metadata extraction features:
+    - support for non-compliant files
     - merge or separate csv files
     - rolling mean for any keyword with a numeric value
     - append new fcs files to previously generated metadata csv file
@@ -22,6 +23,14 @@ Metadata extraction features:
 
 Installation
 ------------
+
+Using pip:
+
+::
+
+    pip install xfcs
+
+Without pip:
 
 ::
 
