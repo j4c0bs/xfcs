@@ -6,7 +6,7 @@ import os
 import sys
 import time
 
-from xfcs.FCSFile.FCSFile import FCSFile
+from xfcs.FCSFile.FCSFile import FCSFile, channel_name_keywords
 from xfcs.utils import metadata_csv, metadata_time
 from xfcs.utils.locator import locate_fcs_files
 from xfcs.utils.metadata_stats import add_param_mean
@@ -53,6 +53,10 @@ def parse_arguments():
         dest='merge', help='Append fcs metadata to existing fcs metadata csv file.')
 
     kw_merge.add_argument(
+        '--spx-names', '-n', action='store_true', dest='spx_names',
+        help='Filter output to only include $PxN channel names.')
+
+    kw_merge.add_argument(
         '--kw-filter', '-k', type=argparse.FileType('r'), metavar='<user_kw.txt>',
         dest='kw_filter', help='Filter output with USER KeyWord preferences file.')
 
@@ -63,6 +67,10 @@ def parse_arguments():
     parser.add_argument(
         '--thirdnormal', '-t', action='store_true', dest='tidy',
         help='Outputs CSV in third normal form (long).')
+
+    parser.add_argument(
+        '-q', '--quiet', action='store_true',
+        help='Disable fcs load notification.')
 
     parser.add_argument('-v', '--version', action='version', version=VERSION)
 
@@ -83,7 +91,7 @@ def read_kw_prefs(kw_filter_file):
 
     user_meta_keys = None
     with open(kw_filter_file, 'r') as kw_file:
-        user_meta_keys = [line.strip() for line in kw_file if line.strip() != '']
+        user_meta_keys = [line.strip().upper() for line in kw_file if line.strip() != '']
 
     for key in reversed(FORCED_SRC_KEYS):
         if key not in user_meta_keys:
@@ -112,7 +120,7 @@ def write_kw_prefs(meta_keys):
 
 
 # ------------------------------------------------------------------------------
-def load_metadata(paths):
+def load_metadata(paths, quiet=False):
     """
         --> makes hashtable -> filepath : fcs file class instance
         meta_keys == all_keys w any new keys extended
@@ -131,7 +139,7 @@ def load_metadata(paths):
     meta_keys.extend(FORCED_SRC_KEYS)
 
     for filepath in paths:
-        fcs = FCSFile()
+        fcs = FCSFile(quiet)
         fcs.load(filepath)
         fcs.set_param('CSV_CREATED', time.strftime('%m/%d/%y %H:%M:%S'))
         fcs.set_param('SRC_DIR', fcs.parentdir)
@@ -300,6 +308,11 @@ def append_metadata(fcs_objs, meta_keys, master_csv, fn_out):
     else:
         all_fcs_objs.extend(fcs_objs)
 
+    if '$DATE' in merge_keys:
+        all_fcs_objs = metadata_time.sort_by_time_params(all_fcs_objs)
+    else:
+        all_fcs_objs.sort(key=lambda fcs: fcs.name)
+
     merge_keys = add_param_mean(all_fcs_objs, merge_keys)
     csv_out_path = merge_metadata(all_fcs_objs, merge_keys, is_tidy, fn_out)
     print('>>> fcs metadata appended to: {}'.format(csv_out_path))
@@ -319,10 +332,10 @@ def main():
     if not paths:
         sys.exit(0)
 
-    fcs_objs, meta_keys = load_metadata(paths)
+    fcs_objs, meta_keys = load_metadata(paths, args.quiet)
 
     # TODO: add arg to force param time sort?
-    if not sort_confirmed:
+    if not sort_confirmed and not args.merge:
         sorted_fcs = metadata_time.sort_by_time_params(fcs_objs)
         if not sorted_fcs:
             print('>>> Unable to access any time related metadata for fcs files.')
@@ -341,11 +354,14 @@ def main():
         append_metadata(fcs_objs, meta_keys, master_csv, fn_out)
 
     else:
+        check_user_mean_keys = False
         if args.kw_filter:
             meta_keys = read_kw_prefs(args.kw_filter.name)
             check_user_mean_keys = any('_MEAN' in key for key in meta_keys)
-        else:
-            check_user_mean_keys = False
+        elif args.spx_names:
+            name_keys = list(channel_name_keywords(meta_keys))
+            meta_keys = list(FORCED_SRC_KEYS)
+            meta_keys.extend(name_keys)
 
         if args.sepfiles:
             csv_paths = batch_separate_metadata(fcs_objs, meta_keys, args.tidy)

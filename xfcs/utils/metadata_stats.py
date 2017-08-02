@@ -6,6 +6,15 @@ from statistics import mean
 # ------------------------------- KW  STATS ------------------------------------
 
 def prep_re_group(re_groupdict):
+    """Extracts and prepares keyword match groups.
+
+    Arg:
+        re_groupdict: re.match.groupdict() instance.
+
+    Returns:
+        parameter keyword, historic mean range, $PxN channel name
+    """
+
     param_key = re_groupdict.get('param')
     channel_name = re_groupdict.get('channel', '').strip('_').replace(' ','').upper()
     tmp_val = re_groupdict.get('val', '')
@@ -18,6 +27,16 @@ def prep_re_group(re_groupdict):
 
 
 def config_spx_mean_keys(fcs_objs, spx_keys):
+    """Configures keywords for $Px params.
+
+    Arg:
+        fcs_objs: iterable of fcs objects
+        spx_keys: iterable of re.match instances
+
+    Returns:
+        spx_mean_keys: iterable of configured keywords needed to add mean values
+    """
+
     spx_mean_keys = []
 
     for spx_key in spx_keys:
@@ -43,6 +62,15 @@ def config_spx_mean_keys(fcs_objs, spx_keys):
 
 
 def config_param_mean_keys(par_keys):
+    """Configures keywords for non-$Px params.
+
+    Arg:
+        par_keys: iterable of re.match instances
+
+    Returns:
+        param_mean_keys: iterable of configured keywords needed to add mean values
+    """
+
     param_mean_keys = []
     for par_match in par_keys:
         data_key, mean_range, _ = prep_re_group(par_match.groupdict())
@@ -57,6 +85,19 @@ def config_param_mean_keys(par_keys):
 
 
 def find_mean_keys(fcs_objs, user_meta_keys):
+    """Locates any user requested mean keyword.
+    Mean keyword format examples:
+        $P8V_FL5LOG_MEAN_10, $PxV_FL5LOG_MEAN_10, $PxV_FL5LOG_MEAN
+        $TOT_MEAN_10, $TOT_MEAN
+
+    Args:
+        fcs_objs: iterable of fcs objects
+        user_meta_keys: all selected metadata keywords
+
+    Returns:
+        mean_keys: iterable of configured keywords needed to add mean values
+    """
+
     spx_re = r'^(?P<param>\$P(x|\d+)\w)_(?P<channel>\w+)_MEAN(?P<val>_\d+)?$'
     spx_mean = re.compile(spx_re, re.IGNORECASE)
     par_mean = re.compile(r'^(?P<param>.+)_MEAN(?P<val>_\d+)?$')
@@ -82,6 +123,7 @@ def find_mean_keys(fcs_objs, user_meta_keys):
 def add_param_mean(fcs_objs, user_meta_keys):
     """Calculates rolling mean for any user selected parameter keyword.
         Confirms parameter's have numeric values and exist within each fcs file.
+        Adds new parameter keywords for any mean values relating to a $PX param.
 
     Args:
         fcs_objs: iterable of loaded FCSFile instances.

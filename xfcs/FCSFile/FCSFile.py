@@ -53,6 +53,19 @@ def filter_ascii32(hex_str):
         return int(hex_str, 16)
 
 
+def channel_name_keywords(meta_keys):
+    """Finds any channel name keyword in the form: $PxN.
+
+    Yields:
+        keyword
+    """
+
+    spxn = re.compile(r'^\$P\d+N$', re.IGNORECASE)
+    for key in meta_keys:
+        if spxn.match(key):
+            yield key
+
+
 # ------------------------------------------------------------------------------
 class FCSFile(object):
     """Instantiates an FCSFile object.
@@ -83,7 +96,7 @@ class FCSFile(object):
 
     """
 
-    def __init__(self):
+    def __init__(self, quiet=False):
         """Initialize an FCSFile object.
 
         Attributes:
@@ -118,6 +131,7 @@ class FCSFile(object):
         self.data = None
         self.__supp_text = None
         self.__analysis = None
+        self.quiet = quiet
 
 
     def load(self, fcs_file):
@@ -190,11 +204,8 @@ class FCSFile(object):
     def check_file_format(self):
         self.valid = validate.required_keywords(self.text)
         self.supported_format = validate.file_mode_type(self.text)
-        print('--> xfcs.load({})'.format(self.name))
-        # vtxt = 'valid' if self.valid else 'invalid'
-        # stxt = 'supported' if self.supported_format else 'unsupported'
-        # print('\n--> xfcs.load({})'.format(self.name))
-        # print('    ver: {} - headers: {} - data extraction: {}'.format(self.version[3:], vtxt, stxt))
+        if not self.quiet:
+            print('--> xfcs.load: {}'.format(self.name))
 
 
     def load_file_spec(self):
@@ -289,6 +300,7 @@ class FCSFile(object):
 
         self.param_keys = tuple(keys_in)
         self.__update_key_set()
+        self.name = self.text.get('SRC_FILE', '')
 
 
     def __update_key_set(self):
