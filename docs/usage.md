@@ -4,14 +4,14 @@
 
 XFCS can read and export any data within FCS 3.0, 3.1 compliant files. Default file type output is csv.
 
-The intent of this project is to assist others in the analysis of flow cytometry data. With access to the data in a useable format, you are liberated from commercial software packages.
+The intent of this project is to assist others in the analysis of flow cytometry data by providing access to the data in a universally useable format.
 
-Short, cautionary notes in advance of riveting documention:
+Short, cautionary notes in advance of riveting documentation:
 * The FCS text section (which I refer to as metadata), contains all necessary information to interpret, scale, and transform raw values.
 Extracted data sets contain only the relevant numerical values per channel.
 Use the conveniently included metadata option to generate a csv file alongside the data.
 
-* If you are generating multiple metadata files, use the --output option to prevent overwrite. The default naming format has no concern for existing files of the same name.
+* If you are generating multiple metadata files, use the `--output` option to prevent overwrite. The default naming format has no concern for existing files of the same name.
 
 
 ------------------------------------------------
@@ -51,8 +51,8 @@ Commands can be combined using their short version and each data set will still 
 
 2. Channel:
 
-    Raw data with bit masks, if applicable. Time is normalized to start at 0 (unless --ref-time enabled).
-    Event count is normalized if it exists (unless --ref-count enabled) or it is automatically added.
+    Raw data with bit masks, if applicable. Time is normalized to start at 0 (unless `--ref-time` enabled).
+    Event count is normalized if it exists (unless `--ref-count` enabled) or it is automatically added.
 
         --channel, -c
 
@@ -101,6 +101,10 @@ Commands can be combined using their short version and each data set will still 
         --metadata, -m
 
 ------------------------------------------------
+
+See [metadata_workflow][metawork] for step by step instructions.
+
+------------------------------------------------
 ### Extract Metadata:
 
     xfcsmeta --options
@@ -133,14 +137,14 @@ Default behavior is for all FCS files to be included within the same csv file an
 
 - Keyword text file.
 
-    Generate user keyword text file containing all keywords located within all FCS files scanned. Necessary for utilizing Keyword filtering and statistics. Generates FCS_USER_KW.txt within current directory.
+    Generate user keyword text file containing all keywords located within all FCS files scanned. Necessary for utilizing Keyword filtering and statistics. Generates `FCS_USER_KW.txt` within current directory.
 
         --get-kw, -g
 
 
 - Keyword Filter and Stats.
 
-    Filter text section keyword values to create custom metadata output. Remove any unwanted keywords from FCS_USER_KW.txt and enter path in command like below. Additional numeric keyword statistics described at the end.
+    Filter text section keyword values to create custom metadata output. Remove any unwanted keywords from `FCS_USER_KW.txt` and enter path in command like below. Additional numeric keyword statistics described at the end.
 
         --kw-filter user_kw.txt, -k user_kw.txt
 
@@ -154,19 +158,28 @@ Default behavior is for all FCS files to be included within the same csv file an
 ------------------------------------------------
 ### Metadata Numeric Keyword Mean:
 
-Using the FCS_USER_KW.txt file, a numeric keyword can have a rolling mean column added to metadata output. Default historic mean range is 10 but can be specified. If used in combination with the add on module xfcsdashboard, parameter mean values will be groupd with their source for easy comparison.
+Using the `FCS_USER_KW.txt` file, a numeric keyword can have a rolling mean column added to metadata output. Default historic mean range is 10 but can be specified. If used in combination with the add on module xfcsdashboard, parameter mean values will be grouped with their source for easy comparison.
 
 Appending MEAN to any keyword will enable this feature.
 
 Example keyword: $P25V
 - enable mean column
+
+    ```
     $P25V_MEAN
+    ```
+
 - enable mean column with history of 5 last values
+
+    ```
     $P25V_MEAN_5
+    ```
 
-If you are tracking values from multiple machine configurations, the parameter id numbers are not necessarily standardized. For example: $P4N is FS Lin in one configuration, after disabling color channels $P4N is now SS Area. Tracking the voltage of $P4V will now be problematic for you.
+If you are tracking values from multiple machine configurations, the parameter id numbers are not necessarily standardized. The keyword mean values are calculated by matching the actual keyword between different fcs files.
 
-Luckily, I have a solution which requires little effort.
+For example: $P4N is __FS Lin__ in a specific machine configuration. But, after disabling or enabling other color channels $P4N now refers to __SS Area__. Tracking the voltage of $P4V will provide invalid results as it includes data for 2 different channels.
+
+Luckily, a solution below!
 
 1. Determine the channel names for current parameter id numbers.
     This information can be found within a metadata file or quickly located by using the following command:
@@ -176,6 +189,11 @@ Luckily, I have a solution which requires little effort.
 
         $PxV_FSLIN_MEAN_10
 
-By utilizing this notation, xfcs will match the paramter by name to all other files. If FS Lin is $P8 in a different configuration, it will include the correct $P8V value within the same column. Please feel free to locate my email within the setup file and ask any questions. I like to be helpful but am moreso curious if anyone has read this (far).
+By utilizing this notation, xfcs will match the parameter by name to all other files. If FS Lin is $P8 in a different configuration, it will include the correct $P8V value within the same column.
+
+Questions and requests can be sent to: <pub@j4c0bs.net>
 
 Enjoy your flow data!
+
+
+[metawork]: metadata_workflow.md

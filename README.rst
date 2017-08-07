@@ -21,6 +21,10 @@ Metadata extraction features:
     - append new fcs files to previously generated metadata csv file
 
 
+Interactive dashboard plots using the `xfcsdashboard <https://github.com/j4c0bs/xfcsdashboard>`_ add-on module.
+.. image:: docs/dashboard_preview.png
+
+
 Installation
 ------------
 
