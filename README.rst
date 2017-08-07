@@ -22,7 +22,7 @@ Metadata extraction features:
 
 
 Interactive dashboard plots using the `xfcsdashboard <https://github.com/j4c0bs/xfcsdashboard>`_ add-on module.
-.. image:: docs/dashboard_preview.png
+  .. image:: docs/dashboard_preview.png
 
 
 Installation
