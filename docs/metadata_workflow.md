@@ -6,11 +6,11 @@
 
 1. Run an initial extraction on one fcs file to view all keyword, value pairs:
 
-        xfcsmeta -i fcsfile1.fcs
+        xfcs metadata -i fcsfile1.fcs
 
 2. Generate keyword only text file which will be edited and used to filter the final scan:
 
-        xfcsmeta -i fcsfile1.fcs -g
+        xfcs metadata -i fcsfile1.fcs -g
 
 3. Open FCS_USER_KW.txt in your preferred text editor and remove unwanted keywords.
     * Change the text file name to your preference.
@@ -18,7 +18,7 @@
 
 4. Extract metadata and apply the keyword filter:
 
-        xfcsmeta -k FCS_USER_KW.txt -o fcs_filtered_metadata.csv
+        xfcs metadata -k FCS_USER_KW.txt -o fcs_filtered_metadata.csv
 
 
 __Tips:__
@@ -61,7 +61,7 @@ Using the `FCS_USER_KW.txt` file, a numeric keyword can have a rolling mean colu
         This information can be found within a metadata file or quickly located by using the following command:
 
         ```
-        xfcsmeta --spx-names
+        xfcs metadata --spx-names
         ```
 
     * Edit your keyword prefs text file and include any mean values using the specific channel attribute (replacing the channel id number with x), channel name, and MEAN keyword with rolling history value.
@@ -77,7 +77,7 @@ Using the `FCS_USER_KW.txt` file, a numeric keyword can have a rolling mean colu
 4. Extract metadata and apply the keyword filter:
 
     ```
-    xfcsmeta -k FCS_USER_KW.txt -o fcs_mean_metadata.csv
+    xfcs metadata -k FCS_USER_KW.txt -o fcs_mean_metadata.csv
     ```
 
 --------------------------------------------------------------------------------

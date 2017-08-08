@@ -31,7 +31,7 @@ With no input files entered, the current directory will be searched for fcs file
 
 ------------------------------------------------
 ### Extract Data:
-        xfcsdata --options
+        xfcs data --options
 
 All data sets are written to their own, separate file and named based on their source FCS file and the type of set. Default output is csv file in long aka third normal form with parameter names as column names.
 
@@ -41,7 +41,7 @@ Extracted data sets include all parameters relative to the specified transform. 
 
 Commands can be combined using their short version and each data set will still generate their own file. e.g. extract raw, channel, and scale values simultaneously
 
-    xfcsdata -wcs
+    xfcs data -wcs
 
 1. Raw:
 
@@ -107,7 +107,7 @@ See [metadata_workflow][metawork] for step by step instructions.
 ------------------------------------------------
 ### Extract Metadata:
 
-    xfcsmeta --options
+    xfcs metadata --options
 
 Extracts all header and text section keyword, value pairs and writes content to csv file. Multiple FCS files can be written to the same csv file regardless of shared keywords. Default format is wide.
 
@@ -183,7 +183,7 @@ Luckily, a solution below!
 
 1. Determine the channel names for current parameter id numbers.
     This information can be found within a metadata file or quickly located by using the following command:
-            xfcsmeta --spx-names
+            xfcs metadata --spx-names
 
 2. Edit your keyword prefs text file and include any mean values using the specific channel attribute and name. If you are tracking voltage and want $P4V, include this line in the keyword text file:
 

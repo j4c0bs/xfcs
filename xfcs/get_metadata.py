@@ -265,6 +265,7 @@ def main(args):
     """
 
     paths, sort_confirmed = get_fcs_paths(args.input, args.recursive, args.limit)
+
     print('>>> fcs files located:', len(paths))
     if not paths:
         sys.exit(0)

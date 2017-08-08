@@ -47,12 +47,12 @@ See
 `USAGE <https://github.com/j4c0bs/xfcs/blob/master/docs/usage.md>`_
 for expanded details.
 
-To see a list of available commands and arguments, run ''xfcsdata --help'' or ''xfcsmeta --help''
+To see a list of available commands and arguments, run ''xfcs data --help'' or ''xfcs metadata --help''
 
 ::
 
-    extract data: xfcsdata [options]
-    extract metadata: xfcsmeta [options]
+    extract data: xfcs data [options]
+    extract metadata: xfcs metadata [options]
 
 Requirements
 ------------
