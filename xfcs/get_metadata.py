@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import argparse
 from itertools import compress
 import os
 import sys
@@ -14,71 +13,6 @@ from xfcs.version import VERSION
 
 # ------------------------------------------------------------------------------
 FORCED_SRC_KEYS = ('CSV_CREATED', 'SRC_DIR', 'SRC_FILE')
-
-# ------------------------------------------------------------------------------
-def parse_arguments():
-    """Parse command line arguments."""
-
-    parser = argparse.ArgumentParser(prog='xfcs', description='Parse FCS Metadata')
-
-    csv_in = parser.add_argument_group('Input Options')
-    csv_in.add_argument(
-        '--input', '-i', nargs='+', type=argparse.FileType('rb'), metavar='<file.fcs>',
-        help='Optional select input file(s) instead of default directory search.')
-
-    csv_in.add_argument(
-        '--recursive', '-r', action='store_true', dest='recursive',
-        help='Enable recursive search of current directory.')
-
-    csv_in.add_argument(
-        '--limit', '-l', type=int, default=0, metavar='n',
-        help='Number of most recent files to parse.')
-
-    csvout = parser.add_argument_group('Output Option - select 1')
-    outgrp = csvout.add_mutually_exclusive_group()
-
-    outgrp.add_argument(
-        '--sep-files', '-s', action='store_true', dest='sepfiles',
-        help='Each input FCS file generates one csv file.')
-
-    outgrp.add_argument(
-        '--output', '-o', type=argparse.FileType('w'), metavar='<file.csv>',
-        help='Output .csv filepath for merged metadata file.')
-
-    procopt = parser.add_argument_group('Metadata Option - select 1')
-    kw_merge = procopt.add_mutually_exclusive_group()
-
-    kw_merge.add_argument(
-        '--append-to', '-a', type=argparse.FileType('r'), metavar='<metadata.csv>',
-        dest='merge', help='Append fcs metadata to existing fcs metadata csv file.')
-
-    kw_merge.add_argument(
-        '--spx-names', '-n', action='store_true', dest='spx_names',
-        help='Filter output to only include $PxN channel names.')
-
-    kw_merge.add_argument(
-        '--kw-filter', '-k', type=argparse.FileType('r'), metavar='<user_kw.txt>',
-        dest='kw_filter', help='Filter output with USER KeyWord preferences file.')
-
-    kw_merge.add_argument(
-        '--get-kw', '-g', action='store_true', dest='get_kw',
-        help='Generate user keyword text file.')
-
-    parser.add_argument(
-        '--thirdnormal', '-t', action='store_true', dest='tidy',
-        help='Outputs CSV in third normal form (long).')
-
-    parser.add_argument(
-        '--dashboard', action='store_true',
-        help='Generate interactive plot with current metadata scan.')
-
-    parser.add_argument(
-        '-q', '--quiet', action='store_true',
-        help='Disable fcs load notification.')
-
-    parser.add_argument('-v', '--version', action='version', version=VERSION)
-
-    return parser.parse_args()
 
 
 # ------------------------------ KEYWORD PREFS ---------------------------------
@@ -323,14 +257,13 @@ def append_metadata(fcs_objs, meta_keys, master_csv, fn_out):
 
 
 # ------------------------------------------------------------------------------
-def main():
+def main(args):
     """Main control for CLI metadata extraction.
 
         fcs_objs: iterable of metadata dicts
         meta_keys: all_keys in order + any new (calculated) keys at end
     """
 
-    args = parse_arguments()
     paths, sort_confirmed = get_fcs_paths(args.input, args.recursive, args.limit)
     print('>>> fcs files located:', len(paths))
     if not paths:

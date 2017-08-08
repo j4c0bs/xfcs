@@ -1,5 +1,4 @@
 
-import argparse
 from collections import namedtuple
 import os
 import sys
@@ -10,67 +9,6 @@ from xfcs.get_metadata import write_obj_metadata
 from xfcs.utils.locator import locate_fcs_files
 from xfcs.version import VERSION
 # ------------------------------------------------------------------------------
-
-def parse_arguments():
-    """Parse command line arguments."""
-
-    parser = argparse.ArgumentParser(prog='xfcsdata', description='Extract FCS Data')
-
-    fcs_in = parser.add_argument_group('Input Options')
-    fcs_in.add_argument(
-        '--input', '-i', nargs='+', type=argparse.FileType('rb'), metavar='<file.fcs>',
-        help='Optional select input file(s) instead of default directory search.')
-
-    fcs_in.add_argument(
-        '--recursive', '-r', action='store_true', dest='recursive',
-        help='Enable recursive search of current directory.')
-
-    dsval = parser.add_argument_group('Data Set Options')
-
-    dsval.add_argument('--raw', '-w', action='store_true', help='Raw data values.')
-
-    dsval.add_argument('--channel', '-c', action='store_true', help='Channel data values.')
-
-    dsval.add_argument(
-        '--scale', '-s', action='store_true', dest='scale',
-        help='Log scale data values.')
-
-    dsval.add_argument(
-        '--xcxs', '-x', action='store_true',
-        help='Scale values and any non-scaled channel values.')
-
-    dsval.add_argument(
-        '--fl-comp', '-f', action='store_true', dest='fl_comp',
-        help='Fluorescence compensated data values.')
-
-    dsval.add_argument(
-        '--scale-fl-comp', '-p', action='store_true', dest='scale_fl_comp',
-        help='Log scaled, fluorescence compensated data values.')
-
-    fcs_out = parser.add_argument_group('Output Options')
-
-    fcs_out.add_argument(
-        '--ref-count', '-e', dest='norm_count', action='store_false',
-        help='Use actual event count parameter data instead of normalizing start to one.')
-
-    fcs_out.add_argument(
-        '--ref-time', '-t', dest='norm_time', action='store_false',
-        help='Use actual time parameter data instead of normalizing start to zero.')
-
-    fcs_out.add_argument(
-        '--hdf5', action='store_true',
-        help='Use HDF5 filetype for data instead of csv.')
-
-    fcs_out.add_argument(
-        '--metadata', '-m', action='store_true',
-        help='Generate metadata csv file for each fcs file.')
-
-    parser.add_argument('-v', '--version', action='version', version=VERSION)
-    return parser.parse_args()
-
-
-# ------------------------------------------------------------------------------
-
 def store_hdf5_data(data_set, data_desc, filepath):
     # >>> fix names
     data_name = os.path.basename(filepath.rsplit('.', 1)[0]).replace(' ', '_')
@@ -121,8 +59,7 @@ def batch_export_data(fcs_paths, data_choices, metadata, norm_count, norm_time, 
             print('>>> Metadata generated for:', fcs.name)
 
 # ------------------------------------------------------------------------------
-def main():
-    args = parse_arguments()
+def main(args):
     if args.input:
         fcs_paths = [infile.name for infile in args.input if infile.name.lower().endswith('.fcs')]
     else:

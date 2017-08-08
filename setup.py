@@ -61,9 +61,8 @@ setup(
     package_data={'':['LICENSE.txt', 'MANIFEST.in', 'docs/*']},
     data_files=[],
     entry_points={
-        'console_scripts': [
-            'xfcsdata=xfcs.get_data:main',
-            'xfcsmeta=xfcs.get_metadata:main'
+        'console_scripts':[
+            'xfcs=xfcs.commands:main'
         ],
     },
 )
